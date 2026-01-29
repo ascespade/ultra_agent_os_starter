@@ -13,11 +13,11 @@ source = "."
 icon = "🚀"
 [[services.env]]
 name = "DATABASE_URL"
-serviceRef = "ultra-agent-db"
+serviceRef = "Postgres"
 variableRef = "DATABASE_PRIVATE_URL"
 [[services.env]]
 name = "REDIS_URL"
-serviceRef = "ultra-agent-redis"
+serviceRef = "Redis"
 variableRef = "REDIS_PRIVATE_URL"
 [[services.env]]
 name = "PORT"
@@ -67,7 +67,7 @@ source = "."
 icon = "⚙️"
 [[services.env]]
 name = "DATABASE_URL"
-serviceRef = "ultra-agent-db"
+serviceRef = "Postgres"
 variableRef = "DATABASE_PRIVATE_URL"
 [[services.env]]
 name = "INTERNAL_API_KEY"
@@ -92,7 +92,7 @@ value = "unix:///var/run/docker.sock"
 
 # PostgreSQL Database
 [[services]]
-name = "ultra-agent-db"
+name = "Postgres"
 image = "postgres:15-alpine"
 icon = "🐘"
 [[services.volumes]]
@@ -110,7 +110,7 @@ generate = true
 
 # Redis Cache
 [[services]]
-name = "ultra-agent-redis"
+name = "Redis"
 image = "redis:7-alpine"
 icon = "⚡"
 [[services.volumes]]
