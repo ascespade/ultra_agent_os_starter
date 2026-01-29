@@ -1,7 +1,7 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "name": "Ultra Agent OS",
-  "description": "MiniMax-like Agent OS with API, Dashboard, Worker & Redis",
+  "description": "MiniMax-like Agent OS with API, UI, Worker, PostgreSQL & Redis",
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
@@ -19,12 +19,14 @@
         "retries": 5,
         "startPeriod": 60
       },
-      "dependsOn": ["redis"],
-      "description": "API Backend Service - Express.js with JWT auth, WebSocket, and job management",
+      "dependsOn": ["ultra-agent-db", "ultra-agent-redis"],
+      "description": "Core Backend API - Authentication, orchestration, memory API, WebSocket gateway",
       "variables": {
         "NODE_ENV": "production",
         "PORT": "3000",
-        "REDIS_URL": "${{redis.REDIS_URL}}",
+        "DATABASE_URL": "${{ultra-agent-db.DATABASE_URL}}",
+        "REDIS_URL": "${{ultra-agent-redis.REDIS_URL}}",
+        "INTERNAL_API_KEY": "${{secrets.INTERNAL_API_KEY}}",
         "JWT_SECRET": "${{secrets.JWT_SECRET}}",
         "DATA_DIR": "/data/agent",
         "OLLAMA_URL": "http://localhost:11434",
@@ -32,23 +34,24 @@
       }
     },
     {
-      "name": "ultra-agent-dashboard",
+      "name": "ultra-agent-ui",
       "source": ".",
       "dockerfilePath": "Dockerfile.dashboard",
       "environment": ["production"],
       "healthcheck": {
-        "path": "/",
+        "path": "/dashboard-health",
         "interval": 30,
         "timeout": 10,
         "retries": 5,
         "startPeriod": 20
       },
       "dependsOn": ["ultra-agent-api"],
-      "description": "Dashboard UI Service - 4-panel MiniMax-like interface",
+      "description": "Dashboard Frontend - User interface and dashboard views",
       "variables": {
         "NODE_ENV": "production",
         "PORT": "3000",
-        "API_URL": "${{ultra-agent-api.RAILWAY_PUBLIC_URL}}"
+        "VITE_API_URL": "/api",
+        "API_INTERNAL_URL": "${{ultra-agent-api.RAILWAY_PRIVATE_URL}}"
       }
     },
     {
@@ -63,11 +66,13 @@
         "retries": 20,
         "startPeriod": 120
       },
-      "dependsOn": ["redis", "ultra-agent-api"],
-      "description": "Background Worker Service - Processes jobs with Docker isolation",
+      "dependsOn": ["ultra-agent-db", "ultra-agent-api"],
+      "description": "Background Worker - Job execution and orchestration processing",
       "variables": {
         "NODE_ENV": "production",
-        "REDIS_URL": "${{redis.REDIS_URL}}",
+        "DATABASE_URL": "${{ultra-agent-db.DATABASE_URL}}",
+        "INTERNAL_API_KEY": "${{secrets.INTERNAL_API_KEY}}",
+        "JWT_SECRET": "${{secrets.JWT_SECRET}}",
         "DATA_DIR": "/data/agent",
         "OLLAMA_URL": "http://localhost:11434",
         "DOCKER_HOST": "unix:///var/run/docker.sock"
@@ -75,7 +80,12 @@
     }
   ],
   "database": {
-    "redis": {
+    "ultra-agent-db": {
+      "version": "15",
+      "multiple": false,
+      "generator": "POSTGRES"
+    },
+    "ultra-agent-redis": {
       "version": "7",
       "multiple": false,
       "generator": "REDIS"
@@ -83,6 +93,7 @@
   },
   "secrets": {
     "description": "Required secrets for Ultra Agent OS deployment",
+    "INTERNAL_API_KEY": "ultra-agent-internal-api-key-change-in-production",
     "JWT_SECRET": "ultra-agent-os-jwt-secret-change-in-production"
   }
 }
