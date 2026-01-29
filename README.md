@@ -1,5 +1,7 @@
 # Ultra Agent OS - Railway Multi-Service Deployment
 
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/ascespade/ultra_agent_os_starter)
+
 MiniMax-like Agent OS with API, Dashboard, Worker, PostgreSQL & Redis deployed on Railway.
 
 ## 🏗️ Architecture
