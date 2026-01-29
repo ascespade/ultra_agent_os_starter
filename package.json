@@ -9,8 +9,12 @@
   "scripts": {
     "install:all": "npm install --workspaces",
     "build": "npm run build --workspaces",
-    "start:api": "npm start --workspace=ultra-agent-api",
-    "start:worker": "npm start --workspace=ultra-agent-worker", 
-    "start:ui": "npm start --workspace=ultra-agent-ui"
+    "start": "concurrently -n api,worker,ui -c blue,green,yellow \"npm run start:api\" \"npm run start:worker\" \"npm run start:ui\"",
+    "start:api": "cd apps/api && npm start",
+    "start:worker": "cd apps/worker && npm start", 
+    "start:ui": "cd apps/ui && npm start"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
   }
 }
