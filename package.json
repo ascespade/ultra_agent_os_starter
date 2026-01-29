@@ -12,9 +12,21 @@
     "start": "concurrently -n api,worker,ui -c blue,green,yellow \"npm run start:api\" \"npm run start:worker\" \"npm run start:ui\"",
     "start:api": "cd apps/api && npm start",
     "start:worker": "cd apps/worker && npm start", 
-    "start:ui": "cd apps/ui && npm start"
+    "start:ui": "cd apps/ui && npm start",
+    "railway:setup": "node scripts/railway-setup.js",
+    "railway:deploy": "railway up",
+    "railway:logs": "railway logs -f",
+    "railway:status": "railway status",
+    "railway:health": "curl -f http://localhost:3000/health || echo 'Health check failed'",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js"
   },
   "dependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "pg": "^8.11.3",
+    "redis": "^4.7.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
   }
 }

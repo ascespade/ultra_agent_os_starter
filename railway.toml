@@ -1,0 +1,118 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm install"
+[deploy]
+startCommand = "npm start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# API Service
+[[services]]
+name = "ultra-agent-api"
+source = "."
+icon = "🚀"
+[[services.env]]
+name = "DATABASE_URL"
+serviceRef = "ultra-agent-db"
+variableRef = "DATABASE_PRIVATE_URL"
+[[services.env]]
+name = "REDIS_URL"
+serviceRef = "ultra-agent-redis"
+variableRef = "REDIS_PRIVATE_URL"
+[[services.env]]
+name = "PORT"
+value = "3000"
+[[services.env]]
+name = "NODE_ENV"
+value = "production"
+[[services.env]]
+name = "INTERNAL_API_KEY"
+generate = true
+[[services.env]]
+name = "JWT_SECRET"
+generate = true
+[[services.env]]
+name = "DATA_DIR"
+value = "/data/agent"
+[[services.env]]
+name = "OLLAMA_URL"
+value = "http://localhost:11434"
+[[services.env]]
+name = "WS_PORT"
+value = "3010"
+
+# UI Service
+[[services]]
+name = "ultra-agent-ui"
+source = "."
+icon = "🎨"
+[[services.env]]
+name = "PORT"
+value = "3000"
+[[services.env]]
+name = "NODE_ENV"
+value = "production"
+[[services.env]]
+name = "VITE_API_URL"
+value = "/api"
+[[services.env]]
+name = "API_INTERNAL_URL"
+serviceRef = "ultra-agent-api"
+variableRef = "RAILWAY_PRIVATE_URL"
+
+# Worker Service
+[[services]]
+name = "ultra-agent-worker"
+source = "."
+icon = "⚙️"
+[[services.env]]
+name = "DATABASE_URL"
+serviceRef = "ultra-agent-db"
+variableRef = "DATABASE_PRIVATE_URL"
+[[services.env]]
+name = "INTERNAL_API_KEY"
+serviceRef = "ultra-agent-api"
+variableRef = "INTERNAL_API_KEY"
+[[services.env]]
+name = "JWT_SECRET"
+serviceRef = "ultra-agent-api"
+variableRef = "JWT_SECRET"
+[[services.env]]
+name = "NODE_ENV"
+value = "production"
+[[services.env]]
+name = "DATA_DIR"
+value = "/data/agent"
+[[services.env]]
+name = "OLLAMA_URL"
+value = "http://localhost:11434"
+[[services.env]]
+name = "DOCKER_HOST"
+value = "unix:///var/run/docker.sock"
+
+# PostgreSQL Database
+[[services]]
+name = "ultra-agent-db"
+image = "postgres:15-alpine"
+icon = "🐘"
+[[services.volumes]]
+mountPath = "/var/lib/postgresql/data"
+name = "pg_data"
+[[services.env]]
+name = "POSTGRES_DB"
+value = "ultra_agent_os"
+[[services.env]]
+name = "POSTGRES_USER"
+value = "ultra_agent"
+[[services.env]]
+name = "POSTGRES_PASSWORD"
+generate = true
+
+# Redis Cache
+[[services]]
+name = "ultra-agent-redis"
+image = "redis:7-alpine"
+icon = "⚡"
+[[services.volumes]]
+mountPath = "/data"
+name = "redis_data"
