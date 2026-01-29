@@ -39,10 +39,6 @@ build/
 *.tmp
 *.temp
 
-# Lock files (will be regenerated)
-package-lock.json
-yarn.lock
-
 # Scripts (not part of core application)
 e2e_test.sh
 final_e2e.sh
