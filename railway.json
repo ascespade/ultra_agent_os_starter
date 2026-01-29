@@ -34,7 +34,9 @@
           "generate": true
         },
         "DATA_DIR": "/data/agent",
-        "OLLAMA_URL": ""
+        "OLLAMA_URL": {
+          "defaultValue": ""
+        }
       }
     },
     {
@@ -53,11 +55,17 @@
       "env": {
         "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
         "REDIS_URL": "${{Redis.REDIS_URL}}",
-        "INTERNAL_API_KEY": "${{ultra-agent-api.INTERNAL_API_KEY}}",
-        "JWT_SECRET": "${{ultra-agent-api.JWT_SECRET}}",
+        "INTERNAL_API_KEY": {
+          "generate": true
+        },
+        "JWT_SECRET": {
+          "generate": true
+        },
         "NODE_ENV": "production",
         "DATA_DIR": "/data/agent",
-        "OLLAMA_URL": ""
+        "OLLAMA_URL": {
+          "defaultValue": ""
+        }
       }
     },
     {
