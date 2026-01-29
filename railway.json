@@ -1,0 +1,150 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm install"
+  },
+  "deploy": {
+    "startCommand": "npm start",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  },
+  "project": {
+    "name": "ultra-agent-core-blueprint"
+  },
+  "services": [
+    {
+      "name": "ultra-agent-api",
+      "source": "apps/api",
+      "icon": "🚀",
+      "env": [
+        {
+          "name": "DATABASE_URL",
+          "serviceRef": "Postgres",
+          "variableRef": "DATABASE_PRIVATE_URL"
+        },
+        {
+          "name": "REDIS_URL",
+          "serviceRef": "Redis",
+          "variableRef": "REDIS_PRIVATE_URL"
+        },
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "INTERNAL_API_KEY",
+          "generate": true
+        },
+        {
+          "name": "JWT_SECRET",
+          "generate": true
+        },
+        {
+          "name": "DATA_DIR",
+          "value": "/data/agent"
+        },
+        {
+          "name": "OLLAMA_URL",
+          "value": ""
+        },
+        {
+          "name": "DEFAULT_ADMIN_PASSWORD",
+          "generate": true
+        }
+      ]
+    },
+    {
+      "name": "ultra-agent-ui",
+      "source": "apps/ui",
+      "icon": "🎨",
+      "env": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "API_URL",
+          "serviceRef": "ultra-agent-api",
+          "variableRef": "RAILWAY_PUBLIC_URL"
+        }
+      ]
+    },
+    {
+      "name": "ultra-agent-worker",
+      "source": "apps/worker",
+      "icon": "⚙️",
+      "env": [
+        {
+          "name": "DATABASE_URL",
+          "serviceRef": "Postgres",
+          "variableRef": "DATABASE_PRIVATE_URL"
+        },
+        {
+          "name": "REDIS_URL",
+          "serviceRef": "Redis",
+          "variableRef": "REDIS_PRIVATE_URL"
+        },
+        {
+          "name": "INTERNAL_API_KEY",
+          "serviceRef": "ultra-agent-api",
+          "variableRef": "INTERNAL_API_KEY"
+        },
+        {
+          "name": "JWT_SECRET",
+          "serviceRef": "ultra-agent-api",
+          "variableRef": "JWT_SECRET"
+        },
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "DATA_DIR",
+          "value": "/data/agent"
+        },
+        {
+          "name": "OLLAMA_URL",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "name": "Postgres",
+      "image": "postgres:15-alpine",
+      "icon": "🐘",
+      "volumes": [
+        {
+          "mountPath": "/var/lib/postgresql/data",
+          "name": "pg_data"
+        }
+      ],
+      "env": [
+        {
+          "name": "POSTGRES_DB",
+          "value": "ultra_agent_os"
+        },
+        {
+          "name": "POSTGRES_USER",
+          "value": "ultra_agent"
+        },
+        {
+          "name": "POSTGRES_PASSWORD",
+          "generate": true
+        }
+      ]
+    },
+    {
+      "name": "Redis",
+      "image": "redis:7-alpine",
+      "icon": "⚡",
+      "volumes": [
+        {
+          "mountPath": "/data",
+          "name": "redis_data"
+        }
+      ],
+      "env": []
+    }
+  ]
+}
