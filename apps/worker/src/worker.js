@@ -4,9 +4,9 @@ const Docker = require('dockerode');
 const path = require('path');
 const fs = require('fs');
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 const DATA_DIR = process.env.DATA_DIR || '/data/agent';
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://ollama:11434';
 
 const redisClient = redis.createClient({ url: REDIS_URL });
 const docker = new Docker();

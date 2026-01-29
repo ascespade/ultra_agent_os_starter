@@ -24,9 +24,9 @@ app.use(limiter);
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'ultra-agent-os-secret-key-change-in-production';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 const DATA_DIR = process.env.DATA_DIR || './data';
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://ollama:11434';
 
 const redisClient = redis.createClient({ url: REDIS_URL });
 redisClient.connect();

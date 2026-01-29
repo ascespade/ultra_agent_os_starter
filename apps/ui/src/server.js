@@ -2,8 +2,8 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 8088;
-const API_URL = process.env.API_URL || 'http://localhost:3000';
+const PORT = process.env.PORT;
+const API_URL = process.env.API_URL || 'http://api:3000';
 
 // Serve static files with API URL injection
 app.get('/', (req, res) => {
