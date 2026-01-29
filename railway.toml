@@ -20,9 +20,6 @@ name = "REDIS_URL"
 serviceRef = "Redis"
 variableRef = "REDIS_PRIVATE_URL"
 [[services.env]]
-name = "PORT"
-value = "3000"
-[[services.env]]
 name = "NODE_ENV"
 value = "production"
 [[services.env]]
