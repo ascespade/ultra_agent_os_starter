@@ -3,13 +3,30 @@ const axios = require('axios');
 const Docker = require('dockerode');
 const path = require('path');
 const fs = require('fs');
+const { initializeDatabase, testConnection } = require('../../../lib/db-connector');
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
+const REDIS_URL = process.env.REDIS_URL;
 const DATA_DIR = process.env.DATA_DIR || '/data/agent';
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://ollama:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL;
+
+// Redis connection with runtime guard
+if (!REDIS_URL) {
+  console.error('[REDIS] REDIS_URL environment variable is required');
+  console.error('[REDIS] Set REDIS_URL to Redis connection string');
+  process.exit(1);
+}
 
 const redisClient = redis.createClient({ url: REDIS_URL });
 const docker = new Docker();
+
+redisClient.on('error', (err) => {
+  console.error('[REDIS] Redis connection error:', err);
+  process.exit(1);
+});
+
+redisClient.on('connect', () => {
+  console.log('[REDIS] Connected to Redis');
+});
 
 function broadcastLog(jobId, logEntry) {
   // Placeholder - actual broadcasting handled by server
@@ -37,13 +54,32 @@ function writeMemoryFile(filename, data) {
 }
 
 async function updateJobStatus(jobId, status, updates = {}) {
-  const jobData = await redisClient.hGet(`job:${jobId}`, 'data');
-  if (jobData) {
-    const job = JSON.parse(jobData);
-    job.status = status;
-    job.updated_at = new Date().toISOString();
-    Object.assign(job, updates);
-    await redisClient.hSet(`job:${jobId}`, 'data', JSON.stringify(job));
+  const db = require('../../../lib/db-connector').getPool();
+  
+  try {
+    // Update in database
+    await db.query(`
+      UPDATE jobs 
+      SET status = $1, output_data = $2, error_message = $3, updated_at = NOW()
+      WHERE id = $4
+    `, [
+      status,
+      JSON.stringify(updates),
+      updates.error || null,
+      jobId
+    ]);
+    
+    // Also update in Redis for real-time access
+    const jobData = await redisClient.hGet(`job:${jobId}`, 'data');
+    if (jobData) {
+      const job = JSON.parse(jobData);
+      job.status = status;
+      job.updated_at = new Date().toISOString();
+      Object.assign(job, updates);
+      await redisClient.hSet(`job:${jobId}`, 'data', JSON.stringify(job));
+    }
+  } catch (error) {
+    console.error('[DATABASE] Failed to update job status:', error);
   }
 }
 
@@ -241,40 +277,77 @@ async function processJob(jobData) {
   const job = JSON.parse(jobData);
   const jobId = job.id;
   
+  console.log(`[WORKER] Processing job ${jobId}: ${job.message}`);
+  
   const jobTimeout = setTimeout(async () => {
-    console.log(`Job ${jobId} timed out, marking as failed`);
+    console.log(`[WORKER] Job ${jobId} timed out, marking as failed`);
     await updateJobStatus(jobId, 'failed', { error: 'Job execution timeout' });
     broadcastLog(jobId, { type: 'job_failed', error: 'Job execution timeout' });
   }, 60000); // 60 second timeout
   
-  broadcastLog(jobId, { type: 'job_start', message: job.message });
+  broadcastLog(jobId, { type: 'job_start', message: `Started processing: ${job.message}` });
   
   try {
     await updateJobStatus(jobId, 'analyzing');
     const intent = await analyzeIntent(job.message);
+    broadcastLog(jobId, { type: 'analysis_complete', intent: intent.intent });
     
     await updateJobStatus(jobId, 'planning', { intent });
     const plan = await createPlan(intent);
+    broadcastLog(jobId, { type: 'plan_created', steps: plan.steps.length });
     
     await updateJobStatus(jobId, 'executing', { plan });
     
+    let completedSteps = 0;
     for (const step of plan.steps) {
       step.status = 'in_progress';
+      broadcastLog(jobId, { 
+        type: 'step_start', 
+        step: step.id, 
+        description: step.description,
+        total_steps: plan.steps.length,
+        completed_steps: completedSteps
+      });
+      
       const result = await executeStep(jobId, step);
       step.status = result.success ? 'completed' : 'failed';
       step.result = result;
+      completedSteps++;
       
-      if (!result.success) {
+      if (result.success) {
+        broadcastLog(jobId, { 
+          type: 'step_complete', 
+          step: step.id, 
+          result: result,
+          progress: `${completedSteps}/${plan.steps.length}`
+        });
+      } else {
         throw new Error(`Step ${step.id} failed: ${result.error}`);
       }
     }
     
     clearTimeout(jobTimeout);
-    await updateJobStatus(jobId, 'completed', { plan, intent });
-    broadcastLog(jobId, { type: 'job_complete', status: 'success' });
+    await updateJobStatus(jobId, 'completed', { 
+      plan, 
+      intent,
+      execution_summary: {
+        total_steps: plan.steps.length,
+        completed_steps: completedSteps,
+        execution_time: Date.now()
+      }
+    });
+    
+    broadcastLog(jobId, { 
+      type: 'job_complete', 
+      status: 'success',
+      summary: `Completed ${completedSteps} steps successfully`
+    });
+    
+    console.log(`[WORKER] Job ${jobId} completed successfully`);
     
   } catch (error) {
     clearTimeout(jobTimeout);
+    console.error(`[WORKER] Job ${jobId} failed:`, error);
     await updateJobStatus(jobId, 'failed', { error: error.message });
     broadcastLog(jobId, { type: 'job_failed', error: error.message });
   }
@@ -327,9 +400,37 @@ async function recoverStuckJobs() {
 async function workerBootstrap() {
   console.log('[CORE] Worker starting...');
   
+  // Initialize database connection
+  try {
+    console.log('[DATABASE] Initializing database connection...');
+    initializeDatabase();
+    
+    console.log('[DATABASE] Testing database connection...');
+    const connectionTest = await testConnection();
+    if (!connectionTest) {
+      throw new Error('Database connection test failed');
+    }
+    
+    console.log('[DATABASE] Database connection established');
+  } catch (error) {
+    console.error('[DATABASE] Database initialization failed:', error);
+    process.exit(1);
+  }
+  
+  // Test Redis connection
+  try {
+    console.log('[REDIS] Testing Redis connection...');
+    await redisClient.connect();
+    await redisClient.ping();
+    console.log('[REDIS] Redis connection verified');
+  } catch (error) {
+    console.error('[REDIS] Redis initialization failed:', error);
+    process.exit(1);
+  }
+  
   // Check adapter availability
-  const ollamaAvailable = !process.env.OLLAMA_URL.includes('localhost');
-  const dockerAvailable = process.env.DOCKER_HOST && !process.env.DOCKER_HOST.includes('localhost');
+  const ollamaAvailable = process.env.OLLAMA_URL && process.env.OLLAMA_URL.trim() !== '' && !process.env.OLLAMA_URL.includes('localhost');
+  const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '' && !process.env.DOCKER_HOST.includes('localhost');
   
   console.log('[ADAPTER] Ollama LLM:', ollamaAvailable ? 'AVAILABLE' : 'UNAVAILABLE');
   console.log('[ADAPTER] Docker Runtime:', dockerAvailable ? 'AVAILABLE' : 'UNAVAILABLE');
@@ -349,19 +450,35 @@ async function workerLoop() {
   // Start recovery loop for stuck jobs
   setTimeout(() => recoverStuckJobs(), 5000);
   
+  let idleCount = 0;
+  const maxIdleCycles = 6; // 6 cycles = 60 seconds (10s per cycle)
+  
   while (true) {
     try {
-      console.log('Checking for jobs...');
+      console.log('[WORKER] Checking for jobs...');
       const jobData = await redisClient.brPop('job_queue', 10);
+      
       if (jobData) {
-        console.log('Found job:', jobData.element.substring(0, 100) + '...');
+        idleCount = 0; // Reset idle counter on job found
+        console.log(`[WORKER] Found job: ${jobData.element.substring(0, 100)}...`);
         await processJob(jobData.element);
-        console.log('Job processing completed');
+        console.log('[WORKER] Job processing completed');
       } else {
-        console.log('No jobs found, continuing...');
+        idleCount++;
+        console.log(`[WORKER] No jobs found (idle cycle ${idleCount}/${maxIdleCycles})`);
+        
+        if (idleCount >= maxIdleCycles) {
+          console.warn('[WORKER] IDLE WARNING: Worker has been idle for 60+ seconds');
+          console.warn('[WORKER] This may indicate: 1) No jobs being submitted, 2) Queue connectivity issue, 3) System malfunction');
+          console.warn('[WORKER] Worker will continue monitoring but system administrator should verify job submission pipeline');
+          
+          // Reset counter to avoid spam but continue monitoring
+          idleCount = 0;
+        }
       }
     } catch (error) {
-      console.error('Worker error:', error);
+      console.error('[WORKER] Worker error:', error);
+      console.error('[WORKER] This is a critical error - worker functionality may be compromised');
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
@@ -370,9 +487,11 @@ async function workerLoop() {
 redisClient.connect().then(async () => {
   console.log('[CORE] Worker connected to Redis');
   await workerBootstrap();
+  console.log('[WORKER] Bootstrap complete, starting worker loop');
   workerLoop();
 }).catch(error => {
   console.error('[CORE] Failed to connect to Redis:', error);
+  console.error('[WORKER] Cannot start without Redis connection');
   process.exit(1);
 });
 

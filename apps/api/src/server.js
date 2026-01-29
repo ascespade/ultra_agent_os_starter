@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { initializeDatabase, executeMigrations, testConnection } = require('../../lib/db-connector');
 
 const app = express();
 app.use(helmet());
@@ -31,14 +32,29 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
+const REDIS_URL = process.env.REDIS_URL;
 const DATA_DIR = process.env.DATA_DIR || './data';
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://ollama:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL;
+
+// Redis connection with runtime guard
+if (!REDIS_URL) {
+  console.error('[REDIS] REDIS_URL environment variable is required');
+  console.error('[REDIS] Set REDIS_URL to Redis connection string');
+  process.exit(1);
+}
 
 const redisClient = redis.createClient({ url: REDIS_URL });
-redisClient.connect();
 
-const wss = new WebSocket.Server({ port: process.env.WS_PORT || 3010 });
+redisClient.on('error', (err) => {
+  console.error('[REDIS] Redis connection error:', err);
+  process.exit(1);
+});
+
+redisClient.on('connect', () => {
+  console.log('[REDIS] Connected to Redis');
+});
+
+const wss = new WebSocket.Server({ port: 3011 });
 
 wss.on('connection', (ws) => {
   console.log('WebSocket client connected');
@@ -99,8 +115,9 @@ function authenticateToken(req, res, next) {
 
 // Initialize default user with security guard
 async function initializeDefaultUser() {
-  const usersFile = path.join(DATA_DIR, 'users.json');
-  if (!fs.existsSync(usersFile)) {
+  const db = require('../../lib/db-connector').getPool();
+  
+  try {
     // Security: Require explicit password for default user creation
     const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD;
     
@@ -116,17 +133,22 @@ async function initializeDefaultUser() {
       return;
     }
     
-    ensureMemoryDir();
+    // Check if admin user already exists
+    const existingUser = await db.query('SELECT id FROM users WHERE username = $1', ['admin']);
+    if (existingUser.rows.length > 0) {
+      console.log('[SECURITY] Admin user already exists');
+      return;
+    }
+    
     const defaultPasswordHash = await bcrypt.hash(defaultPassword, 10);
-    const users = {
-      'admin': {
-        password: defaultPasswordHash,
-        role: 'admin',
-        created: new Date().toISOString()
-      }
-    };
-    fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
-    console.log('[SECURITY] Default admin user created');
+    await db.query(
+      'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
+      ['admin', defaultPasswordHash]
+    );
+    
+    console.log('[SECURITY] Default admin user created in database');
+  } catch (error) {
+    console.error('[SECURITY] Failed to create default user:', error);
   }
 }
 
@@ -157,51 +179,116 @@ app.post('/api/auth/login', async (req, res) => {
   }
   
   try {
-    const usersFile = path.join(DATA_DIR, 'users.json');
-    if (!fs.existsSync(usersFile)) {
+    const db = require('../../lib/db-connector').getPool();
+    const result = await db.query('SELECT id, username, password_hash FROM users WHERE username = $1', [username]);
+    
+    if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    const users = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
-    const user = users[username];
-    
-    if (!user || !await bcrypt.compare(password, user.password)) {
+    const user = result.rows[0];
+    if (!await bcrypt.compare(password, user.password_hash)) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
     const token = jwt.sign(
-      { username, role: user.role },
+      { userId: user.id, username: user.username, role: 'admin' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
     
-    res.json({ token, user: { username, role: user.role } });
+    res.json({ token, user: { id: user.id, username: user.username, role: 'admin' } });
   } catch (error) {
+    console.error('[DATABASE] Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
 // Adapter Status Check Endpoint
-app.get('/api/adapters/status', authenticateToken, (req, res) => {
-  const ollamaAvailable = !process.env.OLLAMA_URL.includes('localhost');
-  const dockerAvailable = process.env.DOCKER_HOST && !process.env.DOCKER_HOST.includes('localhost');
-  
-  res.json({
-    ollama: {
-      available: ollamaAvailable,
-      url: process.env.OLLAMA_URL,
-      status: ollamaAvailable ? 'available' : 'unavailable'
-    },
-    docker: {
-      available: dockerAvailable,
-      socket: process.env.DOCKER_HOST,
-      status: dockerAvailable ? 'available' : 'unavailable'
-    },
-    core: {
-      status: 'operational',
-      message: 'Core platform functionality is always available'
+app.get('/api/adapters/status', authenticateToken, async (req, res) => {
+  try {
+    // Real adapter availability checks
+    const ollamaAvailable = process.env.OLLAMA_URL && process.env.OLLAMA_URL.trim() !== '' && !process.env.OLLAMA_URL.includes('localhost');
+    const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '' && !process.env.DOCKER_HOST.includes('localhost');
+    
+    // Real system status checks
+    const db = require('../../lib/db-connector').getPool();
+    let databaseStatus = 'unknown';
+    let databaseError = null;
+    
+    try {
+      await db.query('SELECT 1');
+      databaseStatus = 'connected';
+    } catch (error) {
+      databaseStatus = 'error';
+      databaseError = error.message;
     }
-  });
+    
+    let redisStatus = 'unknown';
+    let redisError = null;
+    
+    try {
+      await redisClient.ping();
+      redisStatus = 'connected';
+    } catch (error) {
+      redisStatus = 'error';
+      redisError = error.message;
+    }
+    
+    // Real job queue status
+    let queueStatus = 'unknown';
+    let queueLength = 0;
+    
+    try {
+      queueLength = await redisClient.lLen('job_queue');
+      queueStatus = queueLength > 0 ? 'active' : 'idle';
+    } catch (error) {
+      queueStatus = 'error';
+    }
+    
+    const status = {
+      database: {
+        available: databaseStatus === 'connected',
+        status: databaseStatus,
+        error: databaseError,
+        type: 'postgresql'
+      },
+      redis: {
+        available: redisStatus === 'connected',
+        status: redisStatus,
+        error: redisError,
+        queue_length: queueLength,
+        queue_status: queueStatus
+      },
+      adapters: {
+        ollama: {
+          available: ollamaAvailable,
+          url: process.env.OLLAMA_URL || 'not_configured',
+          status: ollamaAvailable ? 'available' : 'unavailable'
+        },
+        docker: {
+          available: dockerAvailable,
+          socket: process.env.DOCKER_HOST || 'not_configured',
+          status: dockerAvailable ? 'available' : 'unavailable'
+        }
+      },
+      core: {
+        status: 'operational',
+        message: 'Core platform functionality is operational',
+        uptime: process.uptime(),
+        memory: process.memoryUsage()
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    res.json(status);
+  } catch (error) {
+    console.error('[API] Adapter status check failed:', error);
+    res.status(500).json({ 
+      error: 'Failed to retrieve adapter status',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 
@@ -229,52 +316,113 @@ app.post('/api/chat', authenticateToken, validateInput, async (req, res) => {
   const { message } = req.body;
   const jobId = uuidv4();
   
-  const job = {
-    id: jobId,
-    message,
-    status: 'planning',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-  
-  await redisClient.lPush('job_queue', JSON.stringify(job));
-  await redisClient.hSet(`job:${jobId}`, 'data', JSON.stringify(job));
-  
-  res.json({ jobId, status: 'queued' });
+  try {
+    const db = require('../../lib/db-connector').getPool();
+    
+    // Store job in database
+    await db.query(`
+      INSERT INTO jobs (id, user_id, type, status, input_data, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+    `, [jobId, req.user.userId, 'chat', 'planning', JSON.stringify({ message })]);
+    
+    // Also queue in Redis for worker
+    const job = {
+      id: jobId,
+      message,
+      status: 'planning',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    await redisClient.lPush('job_queue', JSON.stringify(job));
+    await redisClient.hSet(`job:${jobId}`, 'data', JSON.stringify(job));
+    
+    res.json({ jobId, status: 'queued' });
+  } catch (error) {
+    console.error('[DATABASE] Job creation error:', error);
+    res.status(500).json({ error: 'Failed to create job' });
+  }
 });
 
 app.get('/api/jobs/:jobId', authenticateToken, async (req, res) => {
   const { jobId } = req.params;
-  const jobData = await redisClient.hGet(`job:${jobId}`, 'data');
   
-  if (jobData) {
-    res.json(JSON.parse(jobData));
-  } else {
-    res.status(404).json({ error: 'Job not found' });
+  try {
+    const db = require('../../lib/db-connector').getPool();
+    const result = await db.query(
+      'SELECT * FROM jobs WHERE id = $1 AND user_id = $2',
+      [jobId, req.user.userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    
+    const job = result.rows[0];
+    res.json({
+      id: job.id,
+      type: job.type,
+      status: job.status,
+      input_data: job.input_data,
+      output_data: job.output_data,
+      error_message: job.error_message,
+      created_at: job.created_at,
+      updated_at: job.updated_at
+    });
+  } catch (error) {
+    console.error('[DATABASE] Job retrieval error:', error);
+    res.status(500).json({ error: 'Failed to retrieve job' });
   }
 });
 
 app.get('/api/jobs', authenticateToken, async (req, res) => {
-  const jobs = [];
-  const keys = await redisClient.keys('job:*');
-  
-  for (const key of keys) {
-    const jobData = await redisClient.hGet(key, 'data');
-    if (jobData) {
-      jobs.push(JSON.parse(jobData));
-    }
+  try {
+    const db = require('../../lib/db-connector').getPool();
+    const result = await db.query(
+      'SELECT * FROM jobs WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.user.userId]
+    );
+    
+    const jobs = result.rows.map(job => ({
+      id: job.id,
+      type: job.type,
+      status: job.status,
+      input_data: job.input_data,
+      output_data: job.output_data,
+      error_message: job.error_message,
+      created_at: job.created_at,
+      updated_at: job.updated_at
+    }));
+    
+    res.json(jobs);
+  } catch (error) {
+    console.error('[DATABASE] Jobs list error:', error);
+    res.status(500).json({ error: 'Failed to retrieve jobs' });
   }
-  
-  res.json(jobs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
 });
 
-app.get('/api/memory/:filename', authenticateToken, (req, res) => {
+app.get('/api/memory/:filename', authenticateToken, async (req, res) => {
   const { filename } = req.params;
-  const data = readMemoryFile(filename);
-  res.json(data);
+  
+  try {
+    const db = require('../../lib/db-connector').getPool();
+    const result = await db.query(
+      'SELECT content FROM memories WHERE user_id = $1 AND filename = $2',
+      [req.user.userId, filename]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.json({});
+    }
+    
+    res.json(result.rows[0].content);
+  } catch (error) {
+    console.error('[DATABASE] Memory retrieval error:', error);
+    res.status(500).json({ error: 'Failed to retrieve memory' });
+  }
 });
 
-app.post('/api/memory/:filename', authenticateToken, (req, res) => {
+app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
   const { filename } = req.params;
   const { data } = req.body;
   
@@ -302,46 +450,161 @@ app.post('/api/memory/:filename', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Data must be JSON serializable' });
   }
   
-  writeMemoryFile(filename, data);
-  res.json({ success: true });
+  try {
+    const db = require('../../lib/db-connector').getPool();
+    await db.query(`
+      INSERT INTO memories (user_id, filename, content, created_at, updated_at)
+      VALUES ($1, $2, $3, NOW(), NOW())
+      ON CONFLICT (user_id, filename)
+      DO UPDATE SET content = $3, updated_at = NOW()
+    `, [req.user.userId, filename, data]);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[DATABASE] Memory storage error:', error);
+    res.status(500).json({ error: 'Failed to store memory' });
+  }
 });
 
-app.get('/api/workspace', authenticateToken, (req, res) => {
-  const projectState = readMemoryFile('project_state.json');
-  const constraints = readMemoryFile('constraints.json');
-  const decisions = readMemoryFile('decisions.log');
-  const knownIssues = readMemoryFile('known_issues.json');
-  
-  res.json({
-    projectState,
-    constraints,
-    decisions,
-    knownIssues,
-    lastUpdated: new Date().toISOString()
-  });
+app.get('/api/workspace', authenticateToken, async (req, res) => {
+  try {
+    const db = require('../../lib/db-connector').getPool();
+    
+    // Get all memories for this user
+    const result = await db.query(
+      'SELECT filename, content FROM memories WHERE user_id = $1',
+      [req.user.userId]
+    );
+    
+    const workspace = {
+      projectState: {},
+      constraints: {},
+      decisions: {},
+      knownIssues: {},
+      lastUpdated: new Date().toISOString()
+    };
+    
+    // Organize memories by filename
+    result.rows.forEach(memory => {
+      workspace[memory.filename] = memory.content;
+    });
+    
+    res.json(workspace);
+  } catch (error) {
+    console.error('[DATABASE] Workspace retrieval error:', error);
+    res.status(500).json({ error: 'Failed to retrieve workspace' });
+  }
 });
 
 // Health check endpoint for Railway
-app.get("/health", (req, res) => {
-  res.json({
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage()
-  });
+app.get("/health", async (req, res) => {
+  try {
+    // Real health checks
+    const db = require('../../lib/db-connector').getPool();
+    let databaseHealthy = false;
+    let databaseError = null;
+    
+    try {
+      await db.query('SELECT 1');
+      databaseHealthy = true;
+    } catch (error) {
+      databaseError = error.message;
+    }
+    
+    let redisHealthy = false;
+    let redisError = null;
+    
+    try {
+      await redisClient.ping();
+      redisHealthy = true;
+    } catch (error) {
+      redisError = error.message;
+    }
+    
+    // Check WebSocket server
+    const wsHealthy = wss && wss.clients && wss.clients.size >= 0;
+    
+    const overallHealthy = databaseHealthy && redisHealthy && wsHealthy;
+    
+    const healthData = {
+      status: overallHealthy ? "healthy" : "unhealthy",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      checks: {
+        database: {
+          healthy: databaseHealthy,
+          error: databaseError
+        },
+        redis: {
+          healthy: redisHealthy,
+          error: redisError
+        },
+        websocket: {
+          healthy: wsHealthy,
+          clients: wss ? wss.clients.size : 0
+        }
+      }
+    };
+    
+    res.status(overallHealthy ? 200 : 503).json(healthData);
+  } catch (error) {
+    console.error('[HEALTH] Health check failed:', error);
+    res.status(503).json({
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      error: "Health check failed"
+    });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
 
+// Core Server Bootstrap with Database
+async function serverBootstrap() {
+  try {
+    console.log('[DATABASE] Initializing database connection...');
+    initializeDatabase();
+    
+    console.log('[DATABASE] Testing database connection...');
+    const connectionTest = await testConnection();
+    if (!connectionTest) {
+      throw new Error('Database connection test failed');
+    }
+    
+    console.log('[DATABASE] Running migrations...');
+    await executeMigrations();
+    
+    console.log('[DATABASE] Database initialization complete');
+    
+    // Test Redis connection
+    console.log('[REDIS] Testing Redis connection...');
+    await redisClient.connect();
+    await redisClient.ping();
+    console.log('[REDIS] Redis connection verified');
+    
+  } catch (error) {
+    console.error('[BOOTSTRAP] Initialization failed:', error);
+    process.exit(1);
+  }
+}
+
 // Initialize default user before starting server
-initializeDefaultUser().then(() => {
-  app.listen(PORT, () => {
-    console.log(`[CORE] Ultra Agent API running on ${PORT}`);
-    console.log(`[CORE] WebSocket server running on ${process.env.WS_PORT || 3010}`);
-    console.log(`[SECURITY] Authentication system active`);
+serverBootstrap().then(() => {
+  initializeDefaultUser().then(() => {
+    app.listen(PORT, () => {
+      console.log(`[CORE] Ultra Agent API running on ${PORT}`);
+      console.log(`[CORE] WebSocket server running on ${process.env.WS_PORT || 3010}`);
+      console.log(`[SECURITY] Authentication system active`);
+      console.log(`[DATABASE] PostgreSQL integration active`);
+      console.log(`[REDIS] Redis integration active`);
+    });
+  }).catch(error => {
+    console.error('Failed to initialize default user:', error);
+    process.exit(1);
   });
 }).catch(error => {
-  console.error('Failed to initialize:', error);
+  console.error('Failed to initialize server:', error);
   process.exit(1);
 });
 

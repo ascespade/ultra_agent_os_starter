@@ -453,25 +453,33 @@ class UltraAgentUI {
   }
 
   connectWebSocket() {
-    const wsHost = window.location.hostname;
-    const wsUrl = `ws://${wsHost}:3010`;
+    if (!window.API_URL) {
+      this.addTerminalMessage('API URL not configured');
+      return;
+    }
     
-    console.log('Connecting WebSocket to:', wsUrl);
-    this.ws = new WebSocket(wsUrl);
+    // Convert API URL to WebSocket URL
+    const wsUrl = window.API_URL.replace(/^http/, 'ws') + ':3011';
     
-    this.ws.onopen = () => {
-      this.addTerminalMessage('Connected to Ultra Agent OS');
-    };
-    
-    this.ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      this.handleWebSocketMessage(data);
-    };
-    
-    this.ws.onclose = () => {
-      this.addTerminalMessage('Disconnected - attempting to reconnect...');
-      setTimeout(() => this.connectWebSocket(), 5000);
-    };
+    try {
+      this.ws = new WebSocket(wsUrl);
+      
+      this.ws.onopen = () => {
+        this.addTerminalMessage('Connected to WebSocket');
+      };
+      
+      this.ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        this.handleWebSocketMessage(data);
+      };
+      
+      this.ws.onclose = () => {
+        this.addTerminalMessage('Disconnected - attempting to reconnect...');
+        setTimeout(() => this.connectWebSocket(), 5000);
+      };
+    } catch (error) {
+      this.addTerminalMessage('WebSocket connection failed: ' + error.message);
+    }
   }
 
   handleWebSocketMessage(data) {
@@ -599,11 +607,17 @@ class UltraAgentUI {
     let html = '<h4 style="margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Recent Jobs</h4>';
     this.jobs.slice(0, 10).forEach(job => {
       const statusClass = `status-${job.status}`;
+      const message = job.input_data?.message || job.message || 'No message';
+      const type = job.type || 'chat';
+      
       html += `
         <div class="job-item" onclick="ui.selectJob('${job.id}')">
           <h4>${job.id.substring(0, 8)}</h4>
           <div class="job-status ${statusClass}">${job.status}</div>
-          <div class="job-message">${job.message}</div>
+          <div class="job-message">${message}</div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+            ${type} • ${new Date(job.created_at).toLocaleString()}
+          </div>
         </div>
       `;
     });
@@ -642,14 +656,18 @@ class UltraAgentUI {
       <div style="margin-bottom: 20px;">
         <h4 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">Job: ${job.id.substring(0, 8)}</h4>
         <div style="margin-bottom: 4px;"><strong>Status:</strong> <span class="status-${job.status}">${job.status}</span></div>
-        <div style="margin-bottom: 4px;"><strong>Message:</strong> ${job.message}</div>
+        <div style="margin-bottom: 4px;"><strong>Type:</strong> ${job.type || 'chat'}</div>
+        <div style="margin-bottom: 4px;"><strong>Message:</strong> ${job.input_data?.message || 'No message'}</div>
         <div style="margin-bottom: 4px;"><strong>Created:</strong> ${new Date(job.created_at).toLocaleString()}</div>
+        <div style="margin-bottom: 4px;"><strong>Updated:</strong> ${new Date(job.updated_at).toLocaleString()}</div>
+        ${job.error_message ? `<div style="margin-bottom: 4px; color: var(--error);"><strong>Error:</strong> ${job.error_message}</div>` : ''}
       </div>
     `;
     
-    if (job.plan) {
+    // Show execution plan if available
+    if (job.output_data?.plan) {
       html += '<h5 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">Execution Plan:</h5>';
-      job.plan.steps.forEach(step => {
+      job.output_data.plan.steps.forEach(step => {
         const statusClass = `step-${step.status}`;
         const icon = step.status === 'completed' ? '✓' : step.status === 'failed' ? '✗' : '⏳';
         html += `
@@ -659,6 +677,32 @@ class UltraAgentUI {
           </div>
         `;
       });
+    }
+    
+    // Show execution summary if available
+    if (job.output_data?.execution_summary) {
+      const summary = job.output_data.execution_summary;
+      html += `
+        <div style="margin-top: 16px; padding: 12px; background: var(--secondary); border-radius: 4px;">
+          <h6 style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600;">EXECUTION SUMMARY</h6>
+          <div style="font-size: 12px;">
+            <div><strong>Steps:</strong> ${summary.completed_steps}/${summary.total_steps} completed</div>
+            <div><strong>Duration:</strong> ${summary.execution_time ? new Date(summary.execution_time).toLocaleString() : 'N/A'}</div>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Show raw output data if available
+    if (job.output_data && Object.keys(job.output_data).length > 0) {
+      html += `
+        <div style="margin-top: 16px;">
+          <h6 style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600;">OUTPUT DATA</h6>
+          <div style="font-size: 11px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; background: var(--primary); padding: 8px; border-radius: 4px; overflow-x: auto;">
+            ${JSON.stringify(job.output_data, null, 2)}
+          </div>
+        </div>
+      `;
     }
     
     container.innerHTML = html;
@@ -716,27 +760,51 @@ class UltraAgentUI {
     const container = document.getElementById('adapter-status');
     let html = '';
 
+    // Database Status
+    const dbColor = adapters.database.available ? 'var(--success)' : 'var(--error)';
+    html += `<div class="memory-item">
+      <strong>Database:</strong> 
+      <span style="color: ${dbColor}">${adapters.database.status.toUpperCase()}</span>
+      <br><small>Type: ${adapters.database.type}</small>
+      ${adapters.database.error ? `<br><small>Error: ${adapters.database.error}</small>` : ''}
+    </div>`;
+
+    // Redis Status
+    const redisColor = adapters.redis.available ? 'var(--success)' : 'var(--error)';
+    html += `<div class="memory-item">
+      <strong>Redis:</strong> 
+      <span style="color: ${redisColor}">${adapters.redis.status.toUpperCase()}</span>
+      <br><small>Queue: ${adapters.redis.queue_length} jobs (${adapters.redis.queue_status})</small>
+      ${adapters.redis.error ? `<br><small>Error: ${adapters.redis.error}</small>` : ''}
+    </div>`;
+
     // Ollama Status
-    const ollamaColor = adapters.ollama.available ? 'var(--success)' : 'var(--warning)';
+    const ollamaColor = adapters.adapters.ollama.available ? 'var(--success)' : 'var(--warning)';
     html += `<div class="memory-item">
       <strong>Ollama LLM:</strong> 
-      <span style="color: ${ollamaColor}">${adapters.ollama.status.toUpperCase()}</span>
-      ${adapters.ollama.available ? '' : '<br><small>External LLM adapter unavailable - using core logic</small>'}
+      <span style="color: ${ollamaColor}">${adapters.adapters.ollama.status.toUpperCase()}</span>
+      ${adapters.adapters.ollama.available ? '' : '<br><small>External LLM adapter unavailable - using core logic</small>'}
     </div>`;
 
     // Docker Status
-    const dockerColor = adapters.docker.available ? 'var(--success)' : 'var(--warning)';
+    const dockerColor = adapters.adapters.docker.available ? 'var(--success)' : 'var(--warning)';
     html += `<div class="memory-item">
       <strong>Docker Runtime:</strong> 
-      <span style="color: ${dockerColor}">${adapters.docker.status.toUpperCase()}</span>
-      ${adapters.docker.available ? '' : '<br><small>Container execution adapter unavailable - commands queued</small>'}
+      <span style="color: ${dockerColor}">${adapters.adapters.docker.status.toUpperCase()}</span>
+      ${adapters.adapters.docker.available ? '' : '<br><small>Container execution adapter unavailable - commands queued</small>'}
     </div>`;
 
     // Core Status
     html += `<div class="memory-item">
       <strong>Core Platform:</strong> 
       <span style="color: var(--success)">${adapters.core.status.toUpperCase()}</span>
+      <br><small>Uptime: ${Math.floor(adapters.core.uptime)}s</small>
       <br><small>${adapters.core.message}</small>
+    </div>`;
+
+    // Timestamp
+    html += `<div class="memory-item" style="font-size: 11px; color: var(--text-secondary);">
+      <small>Last updated: ${new Date(adapters.timestamp).toLocaleString()}</small>
     </div>`;
 
     container.innerHTML = html;

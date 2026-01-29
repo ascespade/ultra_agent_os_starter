@@ -33,10 +33,10 @@ name = "DATA_DIR"
 value = "/data/agent"
 [[services.env]]
 name = "OLLAMA_URL"
-value = "http://ollama:11434"
+value = ""
 [[services.env]]
-name = "WS_PORT"
-value = "3010"
+name = "DEFAULT_ADMIN_PASSWORD"
+generate = true
 
 # UI Service
 [[services]]
@@ -47,12 +47,9 @@ icon = "🎨"
 name = "NODE_ENV"
 value = "production"
 [[services.env]]
-name = "VITE_API_URL"
-value = "/api"
-[[services.env]]
-name = "API_INTERNAL_URL"
+name = "API_URL"
 serviceRef = "ultra-agent-api"
-variableRef = "RAILWAY_PRIVATE_URL"
+variableRef = "RAILWAY_PUBLIC_URL"
 
 # Worker Service
 [[services]]
@@ -63,6 +60,10 @@ icon = "⚙️"
 name = "DATABASE_URL"
 serviceRef = "Postgres"
 variableRef = "DATABASE_PRIVATE_URL"
+[[services.env]]
+name = "REDIS_URL"
+serviceRef = "Redis"
+variableRef = "REDIS_PRIVATE_URL"
 [[services.env]]
 name = "INTERNAL_API_KEY"
 serviceRef = "ultra-agent-api"
@@ -79,13 +80,7 @@ name = "DATA_DIR"
 value = "/data/agent"
 [[services.env]]
 name = "OLLAMA_URL"
-value = "http://ollama:11434"
-[[services.env]]
-name = "DOCKER_HOST"
 value = ""
-[[services.env]]
-name = "DOCKER_STATUS"
-value = "adapter_unavailable"
 
 # PostgreSQL Database
 [[services]]
