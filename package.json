@@ -1,0 +1,16 @@
+{
+  "name": "ultra-agent-os",
+  "version": "1.0.0",
+  "description": "Ultra Agent OS - Railway Multi-Service Deployment",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "build": "npm run build --workspaces",
+    "start:api": "npm start --workspace=ultra-agent-api",
+    "start:worker": "npm start --workspace=ultra-agent-worker", 
+    "start:ui": "npm start --workspace=ultra-agent-ui"
+  }
+}
