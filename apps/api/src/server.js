@@ -279,6 +279,16 @@ app.get('/api/workspace', authenticateToken, (req, res) => {
   });
 });
 
+// Health check endpoint for Railway
+app.get("/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
+  });
+});
+
 const PORT = process.env.PORT || 3005;
 
 // Initialize default user before starting server
