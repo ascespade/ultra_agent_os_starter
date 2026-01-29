@@ -1,0 +1,1 @@
+{"name": "ultra-agent-worker", "version": "1.0.0", "description": "Ultra Agent Worker Service", "main": "src/worker.js", "scripts": {"start": "node src/worker.js"}, "dependencies": {"redis": "^4.7.1", "dockerode": "^4.0.9", "uuid": "^9.0.1", "axios": "^1.7.9"}}
