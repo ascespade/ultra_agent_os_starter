@@ -2,11 +2,19 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies for all workspaces
 COPY package*.json ./
-RUN npm ci --only=production
+COPY apps/api/package*.json ./apps/api/
+COPY apps/worker/package*.json ./apps/worker/
+COPY apps/ui/package*.json ./apps/ui/
 
-# Copy all apps
+# Install dependencies
+RUN npm ci --only=production
+RUN cd apps/api && npm ci --only=production
+RUN cd apps/worker && npm ci --only=production  
+RUN cd apps/ui && npm ci --only=production
+
+# Copy source code
 COPY apps/ ./apps/
 
 # Set environment variables
