@@ -18,7 +18,5 @@ pessimistic_evaluator.sh
 quick_test.sh
 verify.sh
 recover_jobs.js
-api
-ui
 docker-compose.yml
 *.md

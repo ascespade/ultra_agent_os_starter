@@ -9,7 +9,7 @@ restartPolicyMaxRetries = 10
 # API Service
 [[services]]
 name = "ultra-agent-api"
-source = "."
+source = "apps/api"
 icon = "🚀"
 [[services.env]]
 name = "DATABASE_URL"
@@ -44,7 +44,7 @@ value = "3010"
 # UI Service
 [[services]]
 name = "ultra-agent-ui"
-source = "."
+source = "apps/ui"
 icon = "🎨"
 [[services.env]]
 name = "PORT"
@@ -63,7 +63,7 @@ variableRef = "RAILWAY_PRIVATE_URL"
 # Worker Service
 [[services]]
 name = "ultra-agent-worker"
-source = "."
+source = "apps/worker"
 icon = "⚙️"
 [[services.env]]
 name = "DATABASE_URL"
