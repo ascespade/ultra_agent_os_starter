@@ -1,0 +1,41 @@
+[build]
+builder = "nixpacks"
+
+[[services]]
+name = "ultra-agent-api"
+source = "api-service"
+[services.config]
+cpu = "1000"
+memory = "1024"
+[services.config.env]
+NODE_ENV = "production"
+PORT = "3000"
+[services.config.health]
+path = "/health"
+timeout = 60
+retries = 3
+
+[[services]]
+name = "ultra-agent-dashboard"
+source = "dashboard-service"
+[services.config]
+cpu = "500"
+memory = "512"
+[services.config.env]
+NODE_ENV = "production"
+[services.config.health]
+path = "/"
+timeout = 30
+retries = 3
+
+[[services]]
+name = "ultra-agent-worker"
+source = "worker-service"
+[services.config]
+cpu = "500"
+memory = "512"
+[services.config.env]
+NODE_ENV = "production"
+[services.config.deployment]
+restart_policy = "on_failure"
+retries = 3
