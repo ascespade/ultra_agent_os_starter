@@ -21,8 +21,15 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'ultra-agent-os-secret-key-change-in-production';
+// JWT Secret with runtime guard
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Runtime security check
+if (!JWT_SECRET) {
+  console.error('[SECURITY] JWT_SECRET environment variable is required');
+  console.error('[SECURITY] Set JWT_SECRET to a secure random string');
+  process.exit(1);
+}
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379';
 const DATA_DIR = process.env.DATA_DIR || './data';
@@ -90,21 +97,36 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Initialize default user
+// Initialize default user with security guard
 async function initializeDefaultUser() {
   const usersFile = path.join(DATA_DIR, 'users.json');
   if (!fs.existsSync(usersFile)) {
+    // Security: Require explicit password for default user creation
+    const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD;
+    
+    if (!defaultPassword) {
+      console.log('[SECURITY] No DEFAULT_ADMIN_PASSWORD provided - skipping default user creation');
+      console.log('[SECURITY] Set DEFAULT_ADMIN_PASSWORD to create default admin user');
+      return;
+    }
+    
+    if (defaultPassword === 'admin123' || defaultPassword.length < 8) {
+      console.error('[SECURITY] Default admin password is too weak');
+      console.error('[SECURITY] Use a stronger password for DEFAULT_ADMIN_PASSWORD');
+      return;
+    }
+    
     ensureMemoryDir();
-    const defaultPassword = await bcrypt.hash('admin123', 10);
+    const defaultPasswordHash = await bcrypt.hash(defaultPassword, 10);
     const users = {
       'admin': {
-        password: defaultPassword,
+        password: defaultPasswordHash,
         role: 'admin',
         created: new Date().toISOString()
       }
     };
     fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
-    console.log('Default admin user created (admin/admin123)');
+    console.log('[SECURITY] Default admin user created');
   }
 }
 
@@ -159,9 +181,29 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => {
-  res.json({ ok: true, timestamp: new Date().toISOString() });
+// Adapter Status Check Endpoint
+app.get('/api/adapters/status', authenticateToken, (req, res) => {
+  const ollamaAvailable = !process.env.OLLAMA_URL.includes('localhost');
+  const dockerAvailable = process.env.DOCKER_HOST && !process.env.DOCKER_HOST.includes('localhost');
+  
+  res.json({
+    ollama: {
+      available: ollamaAvailable,
+      url: process.env.OLLAMA_URL,
+      status: ollamaAvailable ? 'available' : 'unavailable'
+    },
+    docker: {
+      available: dockerAvailable,
+      socket: process.env.DOCKER_HOST,
+      status: dockerAvailable ? 'available' : 'unavailable'
+    },
+    core: {
+      status: 'operational',
+      message: 'Core platform functionality is always available'
+    }
+  });
 });
+
 
 // Input validation middleware
 function validateInput(req, res, next) {
@@ -289,14 +331,14 @@ app.get("/health", (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3005;
+const PORT = process.env.PORT || 3000;
 
 // Initialize default user before starting server
 initializeDefaultUser().then(() => {
   app.listen(PORT, () => {
-    console.log(`Ultra Agent API running on ${PORT}`);
-    console.log(`WebSocket server running on ${process.env.WS_PORT || 3010}`);
-    console.log(`Default credentials: admin/admin123`);
+    console.log(`[CORE] Ultra Agent API running on ${PORT}`);
+    console.log(`[CORE] WebSocket server running on ${process.env.WS_PORT || 3010}`);
+    console.log(`[SECURITY] Authentication system active`);
   });
 }).catch(error => {
   console.error('Failed to initialize:', error);

@@ -347,6 +347,10 @@ body {
         <h4>Known Issues</h4>
         <div id="known-issues"></div>
       </div>
+      <div class="workspace-section">
+        <h4>Adapter Status</h4>
+        <div id="adapter-status"></div>
+      </div>
     </div>
   </div>
   
@@ -686,18 +690,61 @@ class UltraAgentUI {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
       });
       
-      if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('ultra_agent_token');
-        this.authToken = null;
-        this.showLoginForm();
-        return;
-      }
-      
       const workspace = await response.json();
       this.displayWorkspace(workspace);
+      this.loadAdapterStatus();
     } catch (error) {
       console.error('Failed to load workspace:', error);
     }
+  }
+
+  async loadAdapterStatus() {
+    try {
+      const response = await fetch(`${window.API_URL}/api/adapters/status`, {
+        headers: { 'Authorization': `Bearer ${this.authToken}` }
+      });
+      
+      const adapters = await response.json();
+      this.displayAdapterStatus(adapters);
+    } catch (error) {
+      console.error('Failed to load adapter status:', error);
+      this.displayAdapterStatusError();
+    }
+  }
+
+  displayAdapterStatus(adapters) {
+    const container = document.getElementById('adapter-status');
+    let html = '';
+
+    // Ollama Status
+    const ollamaColor = adapters.ollama.available ? 'var(--success)' : 'var(--warning)';
+    html += `<div class="memory-item">
+      <strong>Ollama LLM:</strong> 
+      <span style="color: ${ollamaColor}">${adapters.ollama.status.toUpperCase()}</span>
+      ${adapters.ollama.available ? '' : '<br><small>External LLM adapter unavailable - using core logic</small>'}
+    </div>`;
+
+    // Docker Status
+    const dockerColor = adapters.docker.available ? 'var(--success)' : 'var(--warning)';
+    html += `<div class="memory-item">
+      <strong>Docker Runtime:</strong> 
+      <span style="color: ${dockerColor}">${adapters.docker.status.toUpperCase()}</span>
+      ${adapters.docker.available ? '' : '<br><small>Container execution adapter unavailable - commands queued</small>'}
+    </div>`;
+
+    // Core Status
+    html += `<div class="memory-item">
+      <strong>Core Platform:</strong> 
+      <span style="color: var(--success)">${adapters.core.status.toUpperCase()}</span>
+      <br><small>${adapters.core.message}</small>
+    </div>`;
+
+    container.innerHTML = html;
+  }
+
+  displayAdapterStatusError() {
+    const container = document.getElementById('adapter-status');
+    container.innerHTML = '<div class="memory-item" style="color: var(--error);">Unable to load adapter status</div>';
   }
 
   displayWorkspace(workspace) {

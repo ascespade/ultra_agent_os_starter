@@ -9,7 +9,7 @@ restartPolicyMaxRetries = 10
 # API Service
 [[services]]
 name = "ultra-agent-api"
-source = "services/api"
+source = "apps/api"
 icon = "🚀"
 [[services.env]]
 name = "DATABASE_URL"
@@ -36,7 +36,7 @@ name = "DATA_DIR"
 value = "/data/agent"
 [[services.env]]
 name = "OLLAMA_URL"
-value = "http://localhost:11434"
+value = "http://ollama:11434"
 [[services.env]]
 name = "WS_PORT"
 value = "3010"
@@ -44,7 +44,7 @@ value = "3010"
 # UI Service
 [[services]]
 name = "ultra-agent-ui"
-source = "services/ui"
+source = "apps/ui"
 icon = "🎨"
 [[services.env]]
 name = "PORT"
@@ -63,7 +63,7 @@ variableRef = "RAILWAY_PRIVATE_URL"
 # Worker Service
 [[services]]
 name = "ultra-agent-worker"
-source = "services/worker"
+source = "apps/worker"
 icon = "⚙️"
 [[services.env]]
 name = "DATABASE_URL"
@@ -85,10 +85,13 @@ name = "DATA_DIR"
 value = "/data/agent"
 [[services.env]]
 name = "OLLAMA_URL"
-value = "http://localhost:11434"
+value = "http://ollama:11434"
 [[services.env]]
 name = "DOCKER_HOST"
-value = "unix:///var/run/docker.sock"
+value = ""
+[[services.env]]
+name = "DOCKER_STATUS"
+value = "adapter_unavailable"
 
 # PostgreSQL Database
 [[services]]
