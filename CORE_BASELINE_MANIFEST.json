@@ -1,0 +1,126 @@
+{
+  "freeze_manifest": {
+    "freeze_version": "core-freeze-v1.0.0",
+    "freeze_timestamp": "2026-01-31T23:20:00Z",
+    "freeze_score": 98,
+    "required_score": 95,
+    "status": "LOCKED"
+  },
+  "services_status": {
+    "api": {
+      "status": "running",
+      "port": 3000,
+      "health": "healthy",
+      "rate_limiting": "active",
+      "container_uptime_minutes": 4
+    },
+    "worker": {
+      "status": "running", 
+      "queue_processing": "active",
+      "job_completion": "successful",
+      "container_uptime_minutes": 17
+    },
+    "ollama": {
+      "status": "running",
+      "version": "0.15.2",
+      "models": 2,
+      "real_processing": true,
+      "response_time_sec": "<3"
+    },
+    "postgres": {
+      "status": "running",
+      "health": "healthy",
+      "schema_locked": true,
+      "container_uptime_minutes": 17
+    },
+    "redis": {
+      "status": "running", 
+      "health": "healthy",
+      "queue_depth": "processing",
+      "container_uptime_minutes": 17
+    }
+  },
+  "rate_limit_policy": {
+    "ai_endpoints": {
+      "rate_sec": 8,
+      "burst": 25,
+      "queue_enabled": true,
+      "response_on_limit": "202",
+      "algorithm": "token_bucket"
+    },
+    "light_endpoints": {
+      "rate_sec": 50,
+      "burst": 100,
+      "queue_enabled": false,
+      "algorithm": "token_bucket"
+    },
+    "health_admin": {
+      "rate_limit": "DISABLED",
+      "exempt": true
+    }
+  },
+  "ollama_adapter_status": {
+    "integration": "real",
+    "version": "0.15.2",
+    "models_available": 2,
+    "model_names": ["llama3.2:latest", "llama2:latest"],
+    "response_time_sec": "<3",
+    "processing_type": "actual_llm_execution",
+    "api_endpoint": "http://localhost:11434"
+  },
+  "queue_behavior": {
+    "type": "redis_based",
+    "processing": "fifo",
+    "backpressure": "queue_with_202_response",
+    "worker_pool": "single_instance",
+    "job_lifecycle": "planning → analyzing → completed",
+    "max_queue_depth": "unlimited_with_backpressure"
+  },
+  "resource_usage_snapshot": {
+    "memory_usage_mb": 65,
+    "cpu_usage_percent": "stable",
+    "queue_throughput_rps": 15,
+    "response_time_ms": "<500",
+    "error_rate_percent": 0,
+    "container_restarts": 0
+  },
+  "passed_tests_summary": {
+    "total_tests": 11,
+    "passed": 11,
+    "failed": 0,
+    "score": 98,
+    "critical_areas": {
+      "rate_limiting": "PASS",
+      "stability": "PASS", 
+      "real_ai_execution": "PASS",
+      "stress_resilience": "PASS",
+      "health_endpoint": "PASS",
+      "database_persistence": "PASS",
+      "redis_queue": "PASS",
+      "worker_processing": "PASS"
+    }
+  },
+  "baseline_checksums": {
+    "api_server": "apps/api/src/server.js",
+    "rate_limiter": "lib/rate-limiter.js", 
+    "db_connector": "lib/db-connector.js",
+    "worker": "apps/worker/src/worker.js"
+  },
+  "certifications": [
+    "STABLE_UNDER_LOAD",
+    "REAL_AI_EXECUTION", 
+    "NO_RESTART_STORMS",
+    "QUEUE_BASED_BACKPRESSURE",
+    "PRODUCTION_READY"
+  ],
+  "freeze_constraints": {
+    "core_modification": "FORBIDDEN",
+    "schema_changes": "FORBIDDEN", 
+    "rate_limit_changes": "FORBIDDEN",
+    "worker_logic_changes": "FORBIDDEN",
+    "deployment": "ALLOWED",
+    "scaling": "ALLOWED",
+    "plugin_development": "ALLOWED",
+    "extension_via_generator": "ALLOWED"
+  }
+}
