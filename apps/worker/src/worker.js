@@ -3,7 +3,8 @@ const axios = require('axios');
 const Docker = require('dockerode');
 const path = require('path');
 const fs = require('fs');
-const { initializeDatabase, testConnection } = require('../../../lib/db-connector');
+const { initializeDatabase, testConnection } = require('../lib/db-connector');
+const { CircuitBreaker } = require('../lib/rate-limiter');
 
 const REDIS_URL = process.env.REDIS_URL;
 const DATA_DIR = process.env.DATA_DIR || '/data/agent';
@@ -18,6 +19,7 @@ if (!REDIS_URL) {
 
 const redisClient = redis.createClient({ url: REDIS_URL });
 const docker = new Docker();
+const ollamaCircuitBreaker = new CircuitBreaker(5, 30); // 5 failures, 30s cooldown
 
 redisClient.on('error', (err) => {
   console.error('[REDIS] Redis connection error:', err);
@@ -54,7 +56,7 @@ function writeMemoryFile(filename, data) {
 }
 
 async function updateJobStatus(jobId, status, updates = {}) {
-  const db = require('../../../lib/db-connector').getPool();
+  const db = require('../lib/db-connector').getPool();
   
   try {
     // Update in database
@@ -83,11 +85,16 @@ async function updateJobStatus(jobId, status, updates = {}) {
   }
 }
 
-// Adapter: Ollama LLM Integration
+// Adapter: Ollama LLM Integration with Circuit Breaker Protection
 // Type: PLUGGABLE_ADAPTER
 // Status: Graceful fallback when unavailable
 async function callLLM(prompt, context = {}) {
-  try {
+  if (!OLLAMA_URL) {
+    console.log('[ADAPTER] Ollama URL not configured');
+    return null;
+  }
+
+  const operation = async () => {
     const response = await axios.post(`${OLLAMA_URL}/api/generate`, {
       model: 'llama3.2',
       prompt: `Context: ${JSON.stringify(context)}\n\nUser: ${prompt}\n\nAssistant:`,
@@ -96,11 +103,28 @@ async function callLLM(prompt, context = {}) {
         temperature: 0.1,
         num_predict: 500
       }
+    }, {
+      timeout: 60000 // 60 second timeout
     });
     return response.data.response;
+  };
+
+  try {
+    await ollamaCircuitBreaker.initialize(redisClient);
+    const result = await ollamaCircuitBreaker.execute('ollama_api', operation, 60000);
+    
+    if (result.success) {
+      return result.result;
+    } else {
+      console.log('[ADAPTER] Ollama LLM unavailable:', result.error);
+      if (result.circuitOpen) {
+        console.log('[ADAPTER] Ollama circuit breaker is open - protecting against overload');
+      }
+      return null;
+    }
   } catch (error) {
-    console.log('[ADAPTER] Ollama LLM unavailable:', error.message);
-    return null; // Explicit null for adapter unavailable
+    console.log('[ADAPTER] Ollama LLM error:', error.message);
+    return null;
   }
 }
 
@@ -139,14 +163,31 @@ async function createPlan(intent) {
   
   if (llmPlan) {
     console.log('[ADAPTER] Using LLM-enhanced planning');
-    return {
-      steps: JSON.parse(llmPlan).steps || [
-        { id: '1', action: 'analyze', description: 'LLM-enhanced analysis: ' + intent.intent, status: 'pending' },
-        { id: '2', action: 'execute', description: 'LLM-guided execution: ' + intent.intent, status: 'pending' },
-        { id: '3', action: 'verify', description: 'LLM-assisted verification: ' + intent.intent, status: 'pending' }
-      ],
-      adapter_enhanced: true
-    };
+    try {
+      // Try to parse as JSON first
+      const parsedPlan = JSON.parse(llmPlan);
+      return {
+        steps: parsedPlan.steps || [
+          { id: '1', action: 'analyze', description: 'LLM-enhanced analysis: ' + intent.intent, status: 'pending' },
+          { id: '2', action: 'execute', description: 'LLM-enhanced execution: ' + intent.intent, status: 'pending' },
+          { id: '3', action: 'verify', description: 'LLM-enhanced verification: ' + intent.intent, status: 'pending' }
+        ],
+        adapter_enhanced: true,
+        llm_response: llmPlan
+      };
+    } catch (parseError) {
+      console.log('[ADAPTER] LLM returned text, creating fallback plan');
+      // If parsing fails, create a plan based on the text response
+      return {
+        steps: [
+          { id: '1', action: 'analyze', description: 'LLM-enhanced analysis: ' + intent.intent, status: 'pending' },
+          { id: '2', action: 'execute', description: 'LLM-enhanced execution: ' + intent.intent, status: 'pending' },
+          { id: '3', action: 'verify', description: 'LLM-enhanced verification: ' + intent.intent, status: 'pending' }
+        ],
+        adapter_enhanced: true,
+        llm_response: llmPlan
+      };
+    }
   }
   
   // Core fallback plan (always available)
@@ -219,8 +260,8 @@ async function executeCommand(jobId, step) {
     return { output: 'No command specified' };
   }
   
-  // Adapter Check: Docker execution capability not available
-  const dockerAvailable = process.env.DOCKER_HOST && !process.env.DOCKER_HOST.includes('localhost');
+  // Adapter Check: Docker execution capability
+  const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '';
   
   if (!dockerAvailable) {
     broadcastLog(jobId, { 
@@ -288,15 +329,12 @@ async function processJob(jobData) {
   broadcastLog(jobId, { type: 'job_start', message: `Started processing: ${job.message}` });
   
   try {
-    await updateJobStatus(jobId, 'analyzing');
+    await updateJobStatus(jobId, 'processing');
     const intent = await analyzeIntent(job.message);
     broadcastLog(jobId, { type: 'analysis_complete', intent: intent.intent });
     
-    await updateJobStatus(jobId, 'planning', { intent });
     const plan = await createPlan(intent);
     broadcastLog(jobId, { type: 'plan_created', steps: plan.steps.length });
-    
-    await updateJobStatus(jobId, 'executing', { plan });
     
     let completedSteps = 0;
     for (const step of plan.steps) {
@@ -355,7 +393,7 @@ async function processJob(jobData) {
 
 async function recoverStuckJobs() {
   console.log('Starting stuck job recovery...');
-  const stuckStates = ['planning', 'analyzing', 'executing'];
+  const stuckStates = ['processing'];
   const timeoutMinutes = 5;
   const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
   
@@ -420,7 +458,6 @@ async function workerBootstrap() {
   // Test Redis connection
   try {
     console.log('[REDIS] Testing Redis connection...');
-    await redisClient.connect();
     await redisClient.ping();
     console.log('[REDIS] Redis connection verified');
   } catch (error) {
@@ -429,8 +466,8 @@ async function workerBootstrap() {
   }
   
   // Check adapter availability
-  const ollamaAvailable = process.env.OLLAMA_URL && process.env.OLLAMA_URL.trim() !== '' && !process.env.OLLAMA_URL.includes('localhost');
-  const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '' && !process.env.DOCKER_HOST.includes('localhost');
+  const ollamaAvailable = process.env.OLLAMA_URL && process.env.OLLAMA_URL.trim() !== '';
+  const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '';
   
   console.log('[ADAPTER] Ollama LLM:', ollamaAvailable ? 'AVAILABLE' : 'UNAVAILABLE');
   console.log('[ADAPTER] Docker Runtime:', dockerAvailable ? 'AVAILABLE' : 'UNAVAILABLE');

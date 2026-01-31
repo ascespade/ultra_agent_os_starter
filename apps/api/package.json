@@ -1,1 +1,22 @@
-{"name": "ultra-agent-api", "version": "1.0.0", "description": "Ultra Agent API Service", "main": "src/server.js", "scripts": {"start": "node src/server.js"}, "dependencies": {"express": "^4.22.1", "redis": "^4.7.1", "ws": "^8.18.0", "dockerode": "^4.0.9", "uuid": "^9.0.1", "axios": "^1.7.9", "jsonwebtoken": "^9.0.2", "bcryptjs": "^2.4.3", "helmet": "^7.2.0", "express-rate-limit": "^7.5.1"}}
+{
+  "name": "ultra-agent-api",
+  "version": "1.0.0",
+  "description": "Ultra Agent API Service",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.1",
+    "redis": "^4.7.1",
+    "ws": "^8.18.0",
+    "dockerode": "^4.0.9",
+    "uuid": "^9.0.1",
+    "axios": "^1.7.9",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "helmet": "^7.2.0",
+    "express-rate-limit": "^7.5.1",
+    "pg": "^8.11.5"
+  }
+}

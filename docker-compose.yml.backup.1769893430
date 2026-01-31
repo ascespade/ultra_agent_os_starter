@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=ultra_agent
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATA_DIR=/data/agent
+      - OLLAMA_URL=http://ollama:11434
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - JWT_SECRET=ultra-agent-jwt-secret-change-in-production
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ultra_agent
+      - DEFAULT_ADMIN_PASSWORD=SecureAdminPassword2024!
+    depends_on: [postgres, redis, ollama]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  ui:
+    build:
+      context: .
+      dockerfile: ./apps/ui/Dockerfile
+    ports:
+      - "127.0.0.1:8088:8088"
+    depends_on: [api]
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATA_DIR=/data/agent
+      - OLLAMA_URL=http://ollama:11434
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - JWT_SECRET=ultra-agent-jwt-secret-change-in-production
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ultra_agent
+    depends_on: [postgres, redis, ollama]
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  ollama_data:

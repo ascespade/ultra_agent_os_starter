@@ -3,11 +3,22 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT;
-const API_URL = process.env.API_URL || 'http://api:3000';
+const API_URL = process.env.API_URL;
+
+if (!API_URL) {
+  console.error('[CRITICAL] API_URL environment variable is required');
+  console.error('[CRITICAL] Set API_URL to API service URL');
+  process.exit(1);
+}
 
 // Serve static files with API URL injection
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  // Check if admin control plane is requested
+  if (req.headers['user-agent']?.includes('admin') || req.query.admin === 'true') {
+    res.sendFile(path.join(__dirname, 'index_admin.html'));
+  } else {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  }
 });
 
 // Inject API URL as environment variable for frontend

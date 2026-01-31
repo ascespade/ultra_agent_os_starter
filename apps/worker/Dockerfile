@@ -2,9 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci --only=production
+COPY apps/worker/package*.json ./
+RUN npm install --only=production
 
-COPY src/ ./src/
+COPY apps/worker/src/ ./src/
+COPY lib/ ./lib/
 
 CMD ["npm", "start"]

@@ -8,19 +8,12 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const { initializeDatabase, executeMigrations, testConnection } = require('../../lib/db-connector');
+const { RateLimitOrchestrator } = require('../lib/rate-limiter');
+const { initializeDatabase, executeMigrations, testConnection } = require('../lib/db-connector');
 
 const app = express();
 app.use(helmet());
 app.use(express.json());
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
 
 // JWT Secret with runtime guard
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -115,7 +108,7 @@ function authenticateToken(req, res, next) {
 
 // Initialize default user with security guard
 async function initializeDefaultUser() {
-  const db = require('../../lib/db-connector').getPool();
+  const db = require('../lib/db-connector').getPool();
   
   try {
     // Security: Require explicit password for default user creation
@@ -179,7 +172,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
   
   try {
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     const result = await db.query('SELECT id, username, password_hash FROM users WHERE username = $1', [username]);
     
     if (result.rows.length === 0) {
@@ -212,7 +205,7 @@ app.get('/api/adapters/status', authenticateToken, async (req, res) => {
     const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '' && !process.env.DOCKER_HOST.includes('localhost');
     
     // Real system status checks
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     let databaseStatus = 'unknown';
     let databaseError = null;
     
@@ -317,7 +310,7 @@ app.post('/api/chat', authenticateToken, validateInput, async (req, res) => {
   const jobId = uuidv4();
   
   try {
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     
     // Store job in database
     await db.query(`
@@ -348,7 +341,7 @@ app.get('/api/jobs/:jobId', authenticateToken, async (req, res) => {
   const { jobId } = req.params;
   
   try {
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     const result = await db.query(
       'SELECT * FROM jobs WHERE id = $1 AND user_id = $2',
       [jobId, req.user.userId]
@@ -377,7 +370,7 @@ app.get('/api/jobs/:jobId', authenticateToken, async (req, res) => {
 
 app.get('/api/jobs', authenticateToken, async (req, res) => {
   try {
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     const result = await db.query(
       'SELECT * FROM jobs WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.userId]
@@ -405,7 +398,7 @@ app.get('/api/memory/:filename', authenticateToken, async (req, res) => {
   const { filename } = req.params;
   
   try {
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     const result = await db.query(
       'SELECT content FROM memories WHERE user_id = $1 AND filename = $2',
       [req.user.userId, filename]
@@ -451,11 +444,11 @@ app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
   }
   
   try {
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     await db.query(`
-      INSERT INTO memories (user_id, filename, content, created_at, updated_at)
-      VALUES ($1, $2, $3, NOW(), NOW())
-      ON CONFLICT (user_id, filename)
+      INSERT INTO memories (user_id, filename, content, tenant_id, created_at, updated_at)
+      VALUES ($1, $2, $3, 'default', NOW(), NOW())
+      ON CONFLICT (user_id, filename, tenant_id)
       DO UPDATE SET content = $3, updated_at = NOW()
     `, [req.user.userId, filename, data]);
     
@@ -468,7 +461,7 @@ app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
 
 app.get('/api/workspace', authenticateToken, async (req, res) => {
   try {
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     
     // Get all memories for this user
     const result = await db.query(
@@ -500,7 +493,7 @@ app.get('/api/workspace', authenticateToken, async (req, res) => {
 app.get("/health", async (req, res) => {
   try {
     // Real health checks
-    const db = require('../../lib/db-connector').getPool();
+    const db = require('../lib/db-connector').getPool();
     let databaseHealthy = false;
     let databaseError = null;
     
@@ -591,6 +584,35 @@ async function serverBootstrap() {
 
 // Initialize default user before starting server
 serverBootstrap().then(() => {
+  // Initialize rate limiting after Redis is connected
+  console.log('[RATE_LIMIT] Initializing professional rate limiting system...');
+  const rateLimitOrchestrator = new RateLimitOrchestrator(redisClient);
+  
+  // Apply rate limiting policies to different endpoint categories
+  // CRITICAL: Health and admin endpoints MUST be exempt from rate limiting
+  app.use('/api/chat', rateLimitOrchestrator.getMiddleware('ai_endpoints', (req) => req.user?.userId || req.ip));
+  app.use('/api/jobs', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.user?.userId || req.ip));
+  app.use('/api/memory', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.user?.userId || req.ip));
+  app.use('/api/workspace', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.user?.userId || req.ip));
+  app.use('/api/adapters', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.user?.userId || req.ip));
+  // Health endpoint - NO RATE LIMITING (exempt as per requirements)
+  // Auth endpoints - light rate limiting for security
+  app.use('/api/auth', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.ip));
+  
+  // Add rate limiting metrics endpoint
+  app.get('/api/admin/rate-limit-metrics', authenticateToken, async (req, res) => {
+    try {
+      const metrics = await rateLimitOrchestrator.getMetrics();
+      res.json(metrics);
+    } catch (error) {
+      console.error('[RATE_LIMIT] Metrics endpoint error:', error);
+      res.status(500).json({ error: 'Failed to retrieve rate limit metrics' });
+    }
+  });
+  
+  console.log('[RATE_LIMIT] Rate limiting system initialized');
+  
+  // Now start the server after rate limiting is configured
   initializeDefaultUser().then(() => {
     app.listen(PORT, () => {
       console.log(`[CORE] Ultra Agent API running on ${PORT}`);
@@ -598,6 +620,7 @@ serverBootstrap().then(() => {
       console.log(`[SECURITY] Authentication system active`);
       console.log(`[DATABASE] PostgreSQL integration active`);
       console.log(`[REDIS] Redis integration active`);
+      console.log(`[RATE_LIMIT] Professional rate limiting active`);
     });
   }).catch(error => {
     console.error('Failed to initialize default user:', error);

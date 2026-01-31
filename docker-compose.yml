@@ -1,4 +1,16 @@
 services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=ultra_agent
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -16,50 +28,48 @@ services:
       - OLLAMA_HOST=0.0.0.0
 
   api:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./api:/app
-      - /data/agent:/data/agent
-    command: ["sh", "-c", "npm install && node server.js"]
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
     environment:
       - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data/agent
       - OLLAMA_URL=http://ollama:11434
       - DOCKER_HOST=unix:///var/run/docker.sock
-    depends_on: [redis, ollama]
+      - JWT_SECRET=ultra-agent-jwt-secret-change-in-production
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ultra_agent
+      - DEFAULT_ADMIN_PASSWORD=SecureAdminPassword2024!
+    depends_on: [postgres, redis, ollama]
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
-    user: "1000:1000"
 
   ui:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./ui:/app
-    command: ["sh", "-c", "npm install && node server.js"]
+    build:
+      context: .
+      dockerfile: ./apps/ui/Dockerfile
+    environment:
+      - API_URL=http://api:3000
+      - PORT=8088
     ports:
       - "127.0.0.1:8088:8088"
     depends_on: [api]
     restart: unless-stopped
-    user: "1000:1000"
 
   worker:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./api:/app
-      - /data/agent:/data/agent
-    command: ["sh", "-c", "npm install && node worker.js"]
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
     environment:
       - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data/agent
       - OLLAMA_URL=http://ollama:11434
       - DOCKER_HOST=unix:///var/run/docker.sock
-    depends_on: [redis, ollama]
+      - JWT_SECRET=ultra-agent-jwt-secret-change-in-production
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ultra_agent
+    depends_on: [postgres, redis, ollama]
     restart: unless-stopped
-    user: "1000:1000"
 
 volumes:
+  postgres_data:
   ollama_data:
