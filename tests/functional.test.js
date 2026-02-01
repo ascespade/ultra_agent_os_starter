@@ -31,6 +31,10 @@ async function apiRequest(method, endpoint, data = null, headers = {}) {
       headers: {
         'Content-Type': 'application/json',
         ...headers
+      },
+      timeout: 5000, // 5 second timeout to prevent hanging
+      validateStatus: function (status) {
+        return status < 500; // Don't throw on 4xx errors
       }
     };
     
@@ -41,6 +45,15 @@ async function apiRequest(method, endpoint, data = null, headers = {}) {
     const response = await axios(config);
     return { success: true, data: response.data, status: response.status };
   } catch (error) {
+    // Handle network errors (ECONNREFUSED, ETIMEDOUT, etc.)
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+      return { 
+        success: false, 
+        error: `Network error: ${error.message}`,
+        status: null,
+        networkError: true
+      };
+    }
     return { 
       success: false, 
       error: error.response?.data || error.message, 
