@@ -8,8 +8,8 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
-const { RateLimitOrchestrator } = require('../lib/rate-limiter');
-const { initializeDatabase, executeMigrations, testConnection } = require('../lib/db-connector');
+const { RateLimitOrchestrator } = require('../../../lib/rate-limiter');
+const { initializeDatabase, executeMigrations, testConnection } = require('../../../lib/db-connector');
 
 const app = express();
 app.use(helmet());
