@@ -975,8 +975,8 @@ class UltraAgentUI {
     const errorDiv = document.getElementById('login-error');
     
     try {
-      
-      const response = await fetch(`${window.API_URL}/api/auth/login`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -1068,8 +1068,8 @@ class UltraAgentUI {
     this.addChatMessage(message, 'user');
     
     try {
-      
-      const response = await fetch(`${window.API_URL}/api/chat`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/chat`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -1136,8 +1136,8 @@ class UltraAgentUI {
     if (!this.authToken) return;
     
     try {
-      
-      const response = await fetch(`${window.API_URL}/api/jobs`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/jobs`, {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
       });
       
@@ -1189,8 +1189,8 @@ class UltraAgentUI {
     
     this.currentJob = jobId;
     try {
-      
-      const response = await fetch(`${window.API_URL}/api/jobs/${jobId}`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/jobs/${jobId}`, {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
       });
       
@@ -1288,8 +1288,8 @@ class UltraAgentUI {
     if (!this.authToken) return;
     
     try {
-      
-      const response = await fetch(`${window.API_URL}/api/workspace`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/workspace`, {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
       });
       
@@ -1303,7 +1303,8 @@ class UltraAgentUI {
 
   async loadAdapterStatus() {
     try {
-      const response = await fetch(`${window.API_URL}/api/adapters/status`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/adapters/status`, {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
       });
       

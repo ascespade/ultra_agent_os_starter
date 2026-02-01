@@ -67,7 +67,7 @@ test('Adapter Status Check', async () => {
   // Create a test user token manually for testing
   const jwt = require('jsonwebtoken');
   const testToken = jwt.sign(
-    { userId: 'test-user', username: testUser.username, role: 'user', tenantId: 'default' },
+    { userId: 3, username: testUser.username, role: 'user', tenantId: 'default' },
     'test-jwt-secret-for-functional-testing-only',
     { expiresIn: '24h' }
   );
@@ -86,7 +86,7 @@ test('Adapter Status Check', async () => {
 test('Job Creation and Queue Processing', async () => {
   const jwt = require('jsonwebtoken');
   const testToken = jwt.sign(
-    { userId: 'test-user', username: testUser.username, role: 'user', tenantId: 'default' },
+    { userId: 3, username: testUser.username, role: 'user', tenantId: 'default' },
     'test-jwt-secret-for-functional-testing-only',
     { expiresIn: '24h' }
   );
@@ -119,7 +119,7 @@ test('Job Creation and Queue Processing', async () => {
 test('Memory Storage Operations', async () => {
   const jwt = require('jsonwebtoken');
   const testToken = jwt.sign(
-    { userId: 'test-user', username: testUser.username, role: 'user', tenantId: 'default' },
+    { userId: 3, username: testUser.username, role: 'user', tenantId: 'default' },
     'test-jwt-secret-for-functional-testing-only',
     { expiresIn: '24h' }
   );
@@ -128,7 +128,8 @@ test('Memory Storage Operations', async () => {
   
   // Store memory
   const storeResult = await apiRequest('POST', '/api/memory/test_file', { data: testData }, {
-    'Authorization': `Bearer ${testToken}`
+    'Authorization': `Bearer ${testToken}`,
+    'X-TENANT-ID': 'default'
   });
   
   assert(storeResult.success, 'Should store memory successfully');

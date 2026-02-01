@@ -53,8 +53,14 @@ app.use(express.static(__dirname));
 // Start server with dynamic port allocation
 async function startServer() {
   try {
-    // getAvailablePort returns Railway PORT when RAILWAY_ENVIRONMENT is set
-    PORT = await getAvailablePort('ui', process.env.UI_PORT ? parseInt(process.env.UI_PORT) : 3002);
+    // Use UI_PORT if set, otherwise use dynamic allocation
+    if (process.env.UI_PORT) {
+      PORT = parseInt(process.env.UI_PORT);
+      console.log(`[UI] Using fixed UI_PORT: ${PORT}`);
+    } else {
+      PORT = await getAvailablePort('ui', 3002);
+      console.log(`[UI] Allocated dynamic port: ${PORT}`);
+    }
     
     // Get API port dynamically if not set
     if (!API_URL) {

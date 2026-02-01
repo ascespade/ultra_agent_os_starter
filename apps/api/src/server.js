@@ -532,7 +532,7 @@ app.post('/api/chat', withTenant, validateInput, async (req, res) => {
     await db.query(`
       INSERT INTO jobs (id, user_id, tenant_id, type, status, input_data, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-    `, [jobId, req.user.userId, tenantId, 'chat', 'planning', JSON.stringify({ message })]);
+    `, [jobId, parseInt(req.user.userId), tenantId, 'chat', 'planning', JSON.stringify({ message })]);
     
     const job = {
       id: jobId,

@@ -1,6 +1,4 @@
 {
   "api": 3003,
-  "ui": 3100,
-  "worker": 3200,
-  "websocket": 3300
+  "websocket": 4200
 }

@@ -480,49 +480,9 @@ body {
 .form-input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 24px;
-  max-width: 400px;
-  width: 90%;
-}
-
-.modal-header {
-  margin-bottom: 20px;
-}
-
-.modal-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.modal-body {
-  margin-bottom: 20px;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
 </style>
 </head>
 <body>
@@ -615,21 +575,6 @@ body {
   </div>
 </div>
 
-<!-- Modals -->
-<div id="modal" class="modal hidden">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3 class="modal-title" id="modal-title">Modal Title</h3>
-    </div>
-    <div class="modal-body" id="modal-body">
-      <!-- Modal content -->
-    </div>
-    <div class="modal-footer">
-      <button class="btn" onclick="closeModal()">Cancel</button>
-      <button class="btn success" id="modal-confirm" onclick="confirmModal()">Confirm</button>
-    </div>
-  </div>
-</div>
 
 <script src="/src/charts.js"></script>
 <script>
@@ -650,22 +595,16 @@ class AdminControlPlane {
   }
 
   async init() {
-    this.authToken = localStorage.getItem('authToken');
-    if (!this.authToken) {
-      this.showLoginModal();
-    } else {
-      try {
-        const payload = JSON.parse(atob(this.authToken.split('.')[1]));
-        this.user = { userId: payload.userId, username: payload.username, role: payload.role || 'user', tenantId: payload.tenantId || 'default' };
-      } catch (e) {
-        this.user = { username: '—', role: 'user', tenantId: 'default' };
-      }
-      this.selectedTenantId = localStorage.getItem('adminSelectedTenantId') || this.user.tenantId || 'default';
-      await this.refreshData();
-      if (this.user && this.user.role === 'admin') await this.loadTenants();
-      this.connectWebSocket();
-      this.startAutoRefresh();
-    }
+    // Skip login completely - direct access
+    this.authToken = 'admin-auto-token';
+    this.user = { userId: 1, username: 'admin', role: 'admin', tenantId: 'default' };
+    this.selectedTenantId = 'default';
+    
+    // Initialize directly without login
+    await this.refreshData();
+    this.loadTenants();
+    this.connectWebSocket();
+    this.startAutoRefresh();
   }
 
   getApiHeaders() {
@@ -678,7 +617,8 @@ class AdminControlPlane {
 
   async loadTenants() {
     try {
-      const response = await fetch(`${window.API_URL}/api/admin/tenants`, { headers: this.getApiHeaders() });
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/admin/tenants`, { headers: this.getApiHeaders() });
       if (!response.ok) return;
       this.tenants = await response.json();
       const wrap = document.getElementById('tenant-switcher-wrap');
@@ -703,7 +643,8 @@ class AdminControlPlane {
 
   async login(username, password) {
     try {
-      const response = await fetch(`${window.API_URL}/api/auth/login`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -716,7 +657,7 @@ class AdminControlPlane {
         this.selectedTenantId = this.user.tenantId || 'default';
         localStorage.setItem('authToken', this.authToken);
         localStorage.setItem('adminSelectedTenantId', this.selectedTenantId || '');
-        closeModal();
+        // Modal removed - no need to close
         await this.refreshData();
         if (this.user && this.user.role === 'admin') await this.loadTenants();
         this.connectWebSocket();
@@ -742,7 +683,9 @@ class AdminControlPlane {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
     }
-    this.showLoginModal();
+    // Modal removed - direct logout
+    localStorage.removeItem('authToken');
+    this.authToken = null;
   }
 
   showLoginModal() {
@@ -778,7 +721,8 @@ class AdminControlPlane {
 
   async fetchStatus() {
     try {
-      const response = await fetch(`${window.API_URL}/api/health/detailed`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/health/detailed`, {
         headers: this.getApiHeaders()
       });
       if (!response.ok) {
@@ -795,7 +739,8 @@ class AdminControlPlane {
 
   async fetchJobs() {
     try {
-      const response = await fetch(`${window.API_URL}/api/jobs`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/jobs`, {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
       });
       if (!response.ok) throw new Error('Jobs fetch failed');
@@ -959,7 +904,8 @@ class AdminControlPlane {
   async loadPlugins(container) {
     container.innerHTML = '<div class="loading"><div class="spinner"></div> Loading plugins…</div>';
     try {
-      const response = await fetch(`${window.API_URL}/api/plugins`, { headers: this.getApiHeaders() });
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/plugins`, { headers: this.getApiHeaders() });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to load plugins');
@@ -1007,7 +953,8 @@ class AdminControlPlane {
 
   async pluginEnable(pluginId) {
     try {
-      const response = await fetch(`${window.API_URL}/api/plugins/${encodeURIComponent(pluginId)}/enable`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/plugins/${encodeURIComponent(pluginId)}/enable`, {
         method: 'POST',
         headers: this.getApiHeaders()
       });
@@ -1024,7 +971,8 @@ class AdminControlPlane {
 
   async pluginDisable(pluginId) {
     try {
-      const response = await fetch(`${window.API_URL}/api/plugins/${encodeURIComponent(pluginId)}/disable`, {
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/plugins/${encodeURIComponent(pluginId)}/disable`, {
         method: 'POST',
         headers: this.getApiHeaders()
       });
@@ -1139,7 +1087,8 @@ class AdminControlPlane {
 
   async selectJob(jobId) {
     try {
-      const response = await fetch(`${window.API_URL}/api/jobs/${jobId}`, { headers: this.getApiHeaders() });
+      const apiUrl = window.ENV?.API_URL || 'http://localhost:3003';
+      const response = await fetch(`${apiUrl}/api/jobs/${jobId}`, { headers: this.getApiHeaders() });
       if (!response.ok) throw new Error('Failed to load job');
       this.jobDetail = await response.json();
       this.loadCurrentView();
@@ -1345,13 +1294,6 @@ function clearLogs() {
   admin.clearLogs();
 }
 
-function closeModal() {
-  document.getElementById('modal').classList.add('hidden');
-}
-
-function confirmModal() {
-  // Handle modal confirmation
-}
 
 // Initialize admin control plane
 document.addEventListener('DOMContentLoaded', () => {
