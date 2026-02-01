@@ -65,7 +65,7 @@ redisClient.on('connect', () => {
   console.log('[REDIS] Connected to Redis');
 });
 
-const wss = new WebSocket.Server({ port: 3011 });
+const wss = new WebSocket.Server({ port: 3011, host: '0.0.0.0' });
 
 wss.on('connection', (ws) => {
   console.log('WebSocket client connected');
@@ -742,8 +742,8 @@ serverBootstrap().then(() => {
     const PORT = await getAvailablePort('api', process.env.PORT ? parseInt(process.env.PORT) : 3001);
     const WS_PORT = await getAvailablePort('websocket', 3011);
     
-    // Listen on localhost only to prevent network issues when Tailscale is off
-    const HOST = process.env.HOST || '127.0.0.1';
+    // Listen on all interfaces for Railway deployment
+    const HOST = process.env.HOST || '0.0.0.0';
     app.listen(PORT, HOST, () => {
       console.log(`[CORE] Ultra Agent API running on ${HOST}:${PORT} (env=${profile.env})`);
       console.log(`[CORE] WebSocket server running on port ${WS_PORT}`);
