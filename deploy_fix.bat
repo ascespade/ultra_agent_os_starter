@@ -10,8 +10,8 @@ git commit -m "refactor: complete architecture overhaul (server.js split), secur
 echo [DEPLOY] Pushing to remote...
 git push
 
-echo [DEPLOY] Connecting to remote server to pull and restart...
-ssh remote "cd /home/al-hemam/ultra_agent_os_starter && git pull && docker compose down && docker compose up -d --build"
+echo [DEPLOY] Connecting to remote server to force update and restart...
+ssh remote "cd /home/al-hemam/ultra_agent_os_starter && git fetch --all && git reset --hard origin/main && docker compose down && docker compose up -d --build"
 
 echo [DEPLOY] Done!
 pause
