@@ -738,14 +738,17 @@ serverBootstrap().then(() => {
   
   // Now start the server after rate limiting is configured
   initializeDefaultUser().then(async () => {
+    // Railway environment detection
+    const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
+    
     // Use dynamic port allocation with Railway compatibility
     // Railway provides PORT env var, otherwise use our dynamic system
     const railwayPort = process.env.PORT ? parseInt(process.env.PORT) : null;
     const PORT = await getAvailablePort('api', railwayPort || 3000);
     const WS_PORT = await getAvailablePort('websocket', 3011);
     
-    // Listen on all interfaces for Railway deployment
-    const HOST = process.env.HOST || '0.0.0.0';
+    // Listen on appropriate interface based on environment
+    const HOST = process.env.HOST || (isRailway ? '0.0.0.0' : '127.0.0.1');
     app.listen(PORT, HOST, () => {
       console.log(`[CORE] Ultra Agent API running on ${HOST}:${PORT} (env=${profile.env})`);
       console.log(`[CORE] WebSocket server running on port ${WS_PORT}`);
