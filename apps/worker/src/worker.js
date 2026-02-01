@@ -1,3 +1,4 @@
+require('dotenv').config({ path: '../../.env' });
 const redis = require('redis');
 const axios = require('axios');
 const Docker = require('dockerode');
@@ -5,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { initializeDatabase, testConnection } = require('../lib/db-connector');
 const { CircuitBreaker } = require('../lib/rate-limiter');
-const { getEnvProfile } = require('../config/env-profiles');
+const { getEnvProfile } = require('../lib/env-profiles');
 
 const REDIS_URL = process.env.REDIS_URL;
 const DATA_DIR = process.env.DATA_DIR || '/data/agent';

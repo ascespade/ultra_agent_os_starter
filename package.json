@@ -9,9 +9,12 @@
   "scripts": {
     "install:all": "npm install --workspaces",
     "build": "echo No build required",
-    "start": "concurrently -n api,worker,ui -c blue,green,yellow \"npm run start:api\" \"npm run start:worker\" \"npm run start:ui\"",
+    "ports:init": "node scripts/port-manager.js init",
+    "ports:status": "node scripts/port-manager.js status",
+    "ports:clear": "node scripts/port-manager.js clear",
+    "start": "npm run ports:init && concurrently -n api,worker,ui -c blue,green,yellow \"npm run start:api\" \"npm run start:worker\" \"npm run start:ui\"",
     "start:api": "cd apps/api && npm start",
-    "start:worker": "cd apps/worker && npm start", 
+    "start:worker": "cd apps/worker && npm start",
     "start:ui": "cd apps/ui && npm start",
     "railway:setup": "node scripts/railway-setup.js",
     "railway:deploy": "railway up",
@@ -23,6 +26,7 @@
   },
   "dependencies": {
     "concurrently": "^8.2.2",
+    "dotenv": "^17.2.3",
     "pg": "^8.17.2",
     "redis": "^4.7.1"
   },

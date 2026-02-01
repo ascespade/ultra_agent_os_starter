@@ -1,4 +1,5 @@
 
+require('dotenv').config({ path: '../../.env' });
 const express = require('express');
 const redis = require('redis');
 const WebSocket = require('ws');
@@ -10,6 +11,8 @@ const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 const { RateLimitOrchestrator } = require('../../../lib/rate-limiter');
 const { initializeDatabase, executeMigrations, testConnection } = require('../../../lib/db-connector');
+const { getEnvProfile } = require('../../../config/env-profiles');
+const { getAvailablePort } = require('../../../lib/port-allocator');
 
 const app = express();
 app.use(helmet());
@@ -118,7 +121,7 @@ function requireTenant(req, res, next) {
 
 // Initialize default user with automatic bootstrap
 async function initializeDefaultUser() {
-  const db = require('../lib/db-connector').getPool();
+  const db = require('../../../lib/db-connector').getPool();
   
   try {
     // Check if admin user already exists
@@ -719,7 +722,11 @@ serverBootstrap().then(() => {
   console.log('[RATE_LIMIT] Rate limiting system initialized');
   
   // Now start the server after rate limiting is configured
-  initializeDefaultUser().then(() => {
+  initializeDefaultUser().then(async () => {
+    // Get dynamic port allocation
+    const PORT = await getAvailablePort('api', process.env.PORT ? parseInt(process.env.PORT) : 3001);
+    const WS_PORT = await getAvailablePort('websocket', 3011);
+    
     // Listen on localhost only to prevent network issues when Tailscale is off
     const HOST = process.env.HOST || '127.0.0.1';
     app.listen(PORT, HOST, () => {
