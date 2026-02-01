@@ -1,7 +1,0 @@
-{
-  "frozen_at": "2026-02-01T10:17:02.541Z",
-  "version": "1.0.0",
-  "locked_by": "cleanup-and-validate-orchestrator",
-  "modifications_denied": true,
-  "rollback_available": false
-}
