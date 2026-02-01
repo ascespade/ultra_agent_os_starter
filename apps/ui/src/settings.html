@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Ultra Agent OS – Settings</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/notifications.css">
 <style>
 :root {
   /* Night Sky Palette - كحلي مع نجوم */
@@ -478,7 +479,7 @@ body::before {
     overflow-x: auto;
   }
 }
-</style>
+</link>
 </head>
 <body>
 
@@ -542,7 +543,7 @@ body::before {
               <span class="setting-label-text">Ollama URL</span>
             </div>
             <div class="setting-hint">Local Ollama instance endpoint</div>
-            <input type="text" id="ollama-url" class="setting-input" placeholder="http://localhost:11434" value="http://localhost:11434">
+            <input type="text" id="ollama-url" class="setting-input" placeholder="http://ollama:11434" value="http://ollama:11434">
           </div>
           <div class="setting-item">
             <div class="setting-label">
@@ -636,11 +637,11 @@ body::before {
           </div>
           <div class="setting-hint">Select your preferred color theme</div>
           <div class="color-picker-group">
-            <div class="color-option selected" style="background: linear-gradient(135deg, #4a9eff 0%, #3a7ee6 100%);" onclick="setTheme('blue')" title="Night Sky Blue"></div>
-            <div class="color-option" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);" onclick="setTheme('purple')" title="Purple"></div>
-            <div class="color-option" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);" onclick="setTheme('pink')" title="Pink"></div>
-            <div class="color-option" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);" onclick="setTheme('green')" title="Green"></div>
-            <div class="color-option" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);" onclick="setTheme('orange')" title="Orange"></div>
+            <div class="color-option selected" data-theme="blue" style="background: linear-gradient(135deg, #4a9eff 0%, #3a7ee6 100%);" onclick="setTheme('blue')" title="Night Sky Blue"></div>
+            <div class="color-option" data-theme="purple" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);" onclick="setTheme('purple')" title="Purple"></div>
+            <div class="color-option" data-theme="pink" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);" onclick="setTheme('pink')" title="Pink"></div>
+            <div class="color-option" data-theme="green" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);" onclick="setTheme('green')" title="Green"></div>
+            <div class="color-option" data-theme="orange" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);" onclick="setTheme('orange')" title="Orange"></div>
           </div>
         </div>
 
@@ -767,6 +768,7 @@ body::before {
 <!-- Stars background -->
 <div id="stars-container"></div>
 
+<script src="/src/notifications.js"></script>
 <script>
 // Initialize starfield
 function initStarfield() {
@@ -819,7 +821,7 @@ function updateLLMFields() {
   document.getElementById(provider + '-fields').classList.remove('hidden');
 }
 
-// Test Settings
+// Test Settings with enhanced error handling
 async function testSettings() {
   const provider = document.getElementById('llm-provider').value;
   const resultDiv = document.getElementById('test-result');
@@ -836,18 +838,66 @@ async function testSettings() {
       test: 'connection'
     };
     
+    // Validate inputs based on provider
     if (provider === 'ollama') {
-      testData.url = document.getElementById('ollama-url').value;
-      testData.model = document.getElementById('ollama-model').value;
+      const url = document.getElementById('ollama-url').value.trim();
+      const model = document.getElementById('ollama-model').value.trim();
+      
+      if (!url) {
+        throw new Error('Ollama URL is required');
+      }
+      if (!model) {
+        throw new Error('Ollama model is required');
+      }
+      
+      // Validate URL format
+      try {
+        new URL(url);
+      } catch {
+        throw new Error('Invalid Ollama URL format');
+      }
+      
+      testData.url = url;
+      testData.model = model;
     } else if (provider === 'openai') {
-      testData.apiKey = document.getElementById('openai-api-key').value;
-      testData.model = document.getElementById('openai-model').value;
+      const apiKey = document.getElementById('openai-api-key').value.trim();
+      const model = document.getElementById('openai-model').value;
+      
+      if (!apiKey) {
+        throw new Error('OpenAI API key is required');
+      }
+      if (!apiKey.startsWith('sk-')) {
+        throw new Error('Invalid OpenAI API key format');
+      }
+      
+      testData.apiKey = apiKey;
+      testData.model = model;
     } else if (provider === 'gemini') {
-      testData.apiKey = document.getElementById('gemini-api-key').value;
-      testData.model = document.getElementById('gemini-model').value;
+      const apiKey = document.getElementById('gemini-api-key').value.trim();
+      const model = document.getElementById('gemini-model').value;
+      
+      if (!apiKey) {
+        throw new Error('Gemini API key is required');
+      }
+      if (!apiKey.startsWith('AIza')) {
+        throw new Error('Invalid Gemini API key format');
+      }
+      
+      testData.apiKey = apiKey;
+      testData.model = model;
     } else if (provider === 'claude') {
-      testData.apiKey = document.getElementById('claude-api-key').value;
-      testData.model = document.getElementById('claude-model').value;
+      const apiKey = document.getElementById('claude-api-key').value.trim();
+      const model = document.getElementById('claude-model').value;
+      
+      if (!apiKey) {
+        throw new Error('Claude API key is required');
+      }
+      if (!apiKey.startsWith('sk-ant-')) {
+        throw new Error('Invalid Claude API key format');
+      }
+      
+      testData.apiKey = apiKey;
+      testData.model = model;
     }
     
     const response = await fetch(`${window.API_URL}/api/adapters/test`, {
@@ -862,53 +912,156 @@ async function testSettings() {
     if (response.ok) {
       const data = await response.json();
       resultText.textContent = `✅ ${provider.toUpperCase()} connection successful!`;
+      resultContent.classList.remove('error');
     } else {
-      throw new Error('Connection failed');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
     }
   } catch (error) {
+    console.error('Test settings error:', error);
     resultContent.classList.add('error');
-    resultText.textContent = `❌ Test failed: ${error.message}`;
+    
+    // Provide user-friendly error messages
+    let userMessage = error.message;
+    if (error.message.includes('fetch')) {
+      userMessage = 'Network error - check API connection';
+    } else if (error.message.includes('Failed to fetch')) {
+      userMessage = 'API server unavailable';
+    }
+    
+    resultText.textContent = `❌ Test failed: ${userMessage}`;
   }
 }
 
-// Save Settings
-function saveSettings() {
-  const settings = {
-    llm: {
-      provider: document.getElementById('llm-provider').value
-    },
-    appearance: {
-      theme: document.querySelector('.color-option.selected')?.getAttribute('data-theme') || 'blue',
-      starfield: document.getElementById('starfield-toggle').classList.contains('active'),
-      effects3d: document.getElementById('effects-toggle').classList.contains('active')
+// Save Settings with enhanced validation
+async function saveSettings() {
+  try {
+    // Validate required fields before saving
+    const provider = document.getElementById('llm-provider').value;
+    
+    if (provider === 'ollama') {
+      const url = document.getElementById('ollama-url').value.trim();
+      const model = document.getElementById('ollama-model').value.trim();
+      
+      if (!url) {
+        throw new Error('Ollama URL is required');
+      }
+      if (!model) {
+        throw new Error('Ollama model is required');
+      }
+    } else if (provider === 'openai') {
+      const apiKey = document.getElementById('openai-api-key').value.trim();
+      if (!apiKey || !apiKey.startsWith('sk-')) {
+        throw new Error('Valid OpenAI API key is required');
+      }
+    } else if (provider === 'gemini') {
+      const apiKey = document.getElementById('gemini-api-key').value.trim();
+      if (!apiKey || !apiKey.startsWith('AIza')) {
+        throw new Error('Valid Gemini API key is required');
+      }
+    } else if (provider === 'claude') {
+      const apiKey = document.getElementById('claude-api-key').value.trim();
+      if (!apiKey || !apiKey.startsWith('sk-ant-')) {
+        throw new Error('Valid Claude API key is required');
+      }
     }
-  };
-  
-  // Save provider-specific settings
-  const provider = settings.llm.provider;
-  if (provider === 'ollama') {
-    settings.llm.url = document.getElementById('ollama-url').value;
-    settings.llm.model = document.getElementById('ollama-model').value;
-  } else if (provider === 'openai') {
-    settings.llm.apiKey = document.getElementById('openai-api-key').value;
-    settings.llm.model = document.getElementById('openai-model').value;
-  } else if (provider === 'gemini') {
-    settings.llm.apiKey = document.getElementById('gemini-api-key').value;
-    settings.llm.model = document.getElementById('gemini-model').value;
-  } else if (provider === 'claude') {
-    settings.llm.apiKey = document.getElementById('claude-api-key').value;
-    settings.llm.model = document.getElementById('claude-model').value;
+    
+    const settings = {
+      llm: {
+        provider: provider
+      },
+      appearance: {
+        theme: document.querySelector('.color-option.selected')?.getAttribute('data-theme') || 'blue',
+        starfield: document.getElementById('starfield-toggle').classList.contains('active'),
+        effects3d: document.getElementById('effects-toggle').classList.contains('active'),
+        fontSize: document.getElementById('font-size').value
+      },
+      system: {
+        dbHost: document.getElementById('db-host').value,
+        dbPort: document.getElementById('db-port').value,
+        redisUrl: document.getElementById('redis-url').value,
+        autosave: document.getElementById('autosave-toggle').classList.contains('active'),
+        jobTimeout: document.getElementById('job-timeout').value
+      }
+    };
+    
+    // Save provider-specific settings
+    if (provider === 'ollama') {
+      settings.llm.url = document.getElementById('ollama-url').value;
+      settings.llm.model = document.getElementById('ollama-model').value;
+    } else if (provider === 'openai') {
+      settings.llm.apiKey = document.getElementById('openai-api-key').value;
+      settings.llm.model = document.getElementById('openai-model').value;
+    } else if (provider === 'gemini') {
+      settings.llm.apiKey = document.getElementById('gemini-api-key').value;
+      settings.llm.model = document.getElementById('gemini-model').value;
+    } else if (provider === 'claude') {
+      settings.llm.apiKey = document.getElementById('claude-api-key').value;
+      settings.llm.model = document.getElementById('claude-model').value;
+    }
+    
+    // Save to database via API
+    const response = await fetch(`${window.API_URL}/api/user/settings`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ settings })
+    });
+    
+    if (response.ok) {
+      // Apply settings immediately
+      applySettings(settings);
+      if (typeof notifications !== 'undefined') {
+        notifications.success('Settings saved successfully!', 'Success');
+      } else {
+        alert('✅ Settings saved successfully!');
+      }
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to save settings to database');
+    }
+  } catch (error) {
+    console.error('Save settings error:', error);
+    
+    // Provide user-friendly error messages
+    let userMessage = error.message;
+    if (error.message.includes('fetch')) {
+      userMessage = 'Network error - check connection to API server';
+    } else if (error.message.includes('401') || error.message.includes('403')) {
+      userMessage = 'Authentication error - please log in again';
+    }
+    
+    if (typeof notifications !== 'undefined') {
+      notifications.error(`Error: ${userMessage}`, 'Settings Error');
+    } else {
+      alert(`❌ Error: ${userMessage}`);
+    }
   }
-  
-  localStorage.setItem('ultra-agent-settings', JSON.stringify(settings));
-  alert('✅ Settings saved successfully!');
 }
 
 // Reset Settings
-function resetSettings() {
+async function resetSettings() {
   if (confirm('Are you sure you want to reset all settings to defaults?')) {
-    localStorage.removeItem('ultra-agent-settings');
-    location.reload();
+    try {
+      // Delete from database
+      const response = await fetch(`${window.API_URL}/api/user/settings`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Clear local storage regardless of API response
+      localStorage.removeItem('ultra-agent-settings');
+      location.reload();
+    } catch (error) {
+      console.error('Reset settings error:', error);
+      localStorage.removeItem('ultra-agent-settings');
+      location.reload();
+    }
   }
 }
 
@@ -931,16 +1084,150 @@ function toggleAutosave() {
 function setTheme(theme) {
   document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
   event.target.classList.add('selected');
+  
+  // Apply theme immediately via CSS variables
+  const themeColors = {
+    blue: { primary: '#0a1428', secondary: '#1a2847', accent: '#4a9eff', accentDark: '#3a7ee6' },
+    purple: { primary: '#1a0b2e', secondary: '#2d1b69', accent: '#8b5cf6', accentDark: '#7c3aed' },
+    pink: { primary: '#2d1b21', secondary: '#4a1f31', accent: '#ec4899', accentDark: '#db2777' },
+    green: { primary: '#0a1f1b', secondary: '#1a2e28', accent: '#10b981', accentDark: '#059669' },
+    orange: { primary: '#1f0f08', secondary: '#3a1f0f', accent: '#f97316', accentDark: '#ea580c' }
+  };
+  
+  const colors = themeColors[theme] || themeColors.blue;
+  const root = document.documentElement;
+  
+  root.style.setProperty('--primary', colors.primary);
+  root.style.setProperty('--secondary', colors.secondary);
+  root.style.setProperty('--accent', colors.accent);
+  root.style.setProperty('--accent-dark', colors.accentDark);
+  root.style.setProperty('--background', colors.primary);
+  root.style.setProperty('--surface', colors.secondary);
 }
 
 function goBack() {
   window.location.href = '/';
 }
 
+// Apply settings dynamically to the UI
+function applySettings(settings) {
+  if (!settings) return;
+  
+  // Apply appearance settings
+  if (settings.appearance) {
+    const { theme, starfield, effects3d, fontSize } = settings.appearance;
+    
+    // Apply theme
+    if (theme) {
+      const themeColors = {
+        blue: { primary: '#0a1428', secondary: '#1a2847', accent: '#4a9eff', accentDark: '#3a7ee6' },
+        purple: { primary: '#1a0b2e', secondary: '#2d1b69', accent: '#8b5cf6', accentDark: '#7c3aed' },
+        pink: { primary: '#2d1b21', secondary: '#4a1f31', accent: '#ec4899', accentDark: '#db2777' },
+        green: { primary: '#0a1f1b', secondary: '#1a2e28', accent: '#10b981', accentDark: '#059669' },
+        orange: { primary: '#1f0f08', secondary: '#3a1f0f', accent: '#f97316', accentDark: '#ea580c' }
+      };
+      
+      const colors = themeColors[theme] || themeColors.blue;
+      const root = document.documentElement;
+      
+      root.style.setProperty('--primary', colors.primary);
+      root.style.setProperty('--secondary', colors.secondary);
+      root.style.setProperty('--accent', colors.accent);
+      root.style.setProperty('--accent-dark', colors.accentDark);
+      root.style.setProperty('--background', colors.primary);
+      root.style.setProperty('--surface', colors.secondary);
+    }
+    
+    // Apply starfield
+    if (typeof starfield === 'boolean') {
+      const starsContainer = document.getElementById('stars-container');
+      if (starsContainer) {
+        starsContainer.style.display = starfield ? 'block' : 'none';
+      }
+    }
+    
+    // Apply 3D effects
+    if (typeof effects3d === 'boolean') {
+      document.body.style.setProperty('--enable-3d', effects3d ? '1' : '0');
+    }
+    
+    // Apply font size
+    if (fontSize) {
+      const fontSizeMap = { small: '12px', medium: '13px', large: '14px' };
+      document.documentElement.style.setProperty('--base-font-size', fontSizeMap[fontSize] || '13px');
+    }
+  }
+}
+
+// Load settings from database on page load
+async function loadSettings() {
+  try {
+    const response = await fetch(`${window.API_URL}/api/user/settings`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const settings = data.settings;
+      
+      // Populate form fields
+      if (settings.llm) {
+        document.getElementById('llm-provider').value = settings.llm.provider || 'ollama';
+        updateLLMFields();
+        
+        if (settings.llm.provider === 'ollama') {
+          document.getElementById('ollama-url').value = settings.llm.url || 'http://ollama:11434';
+          document.getElementById('ollama-model').value = settings.llm.model || 'llama3.2';
+        }
+      }
+      
+      if (settings.appearance) {
+        // Set theme
+        const theme = settings.appearance.theme || 'blue';
+        document.querySelectorAll('.color-option').forEach(el => {
+          el.classList.remove('selected');
+          if (el.getAttribute('data-theme') === theme || 
+              (theme === 'blue' && el.style.background.includes('4a9eff'))) {
+            el.classList.add('selected');
+          }
+        });
+        
+        // Set toggles
+        const starfieldToggle = document.getElementById('starfield-toggle');
+        const effectsToggle = document.getElementById('effects-toggle');
+        
+        if (settings.appearance.starfield) starfieldToggle.classList.add('active');
+        else starfieldToggle.classList.remove('active');
+        
+        if (settings.appearance.effects3d) effectsToggle.classList.add('active');
+        else effectsToggle.classList.remove('active');
+        
+        // Set font size
+        document.getElementById('font-size').value = settings.appearance.fontSize || 'medium';
+      }
+      
+      // Apply settings immediately
+      applySettings(settings);
+    }
+  } catch (error) {
+    console.error('Load settings error:', error);
+    // Fallback to localStorage
+    const localSettings = localStorage.getItem('ultra-agent-settings');
+    if (localSettings) {
+      const settings = JSON.parse(localSettings);
+      applySettings(settings);
+    }
+  }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   initStarfield();
   updateLLMFields();
+  loadSettings();
 });
 </script>
 

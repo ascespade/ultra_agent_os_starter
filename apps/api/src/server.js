@@ -18,8 +18,10 @@ const { RateLimitOrchestrator } = require('../../../lib/rate-limiter');
 const { initializeDatabase, executeMigrations, testConnection } = require('../../../lib/db-connector');
 const { getEnvProfile } = require('../../../config/env-profiles');
 const { getAvailablePort } = require('../../../lib/port-allocator');
+const SecurityManager = require('../../../lib/security');
 
 const app = express();
+const security = new SecurityManager();
 
 // CORS: allow UI origin (fix "Failed to fetch" on login)
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '*').split(',').map(s => s.trim());
@@ -385,8 +387,12 @@ app.post('/api/adapters/test', authenticateToken, async (req, res) => {
     
     switch (provider) {
       case 'ollama':
-        // Test Ollama connection
-        const ollamaResponse = await fetch(`${url}/api/tags`, {
+        // Test Ollama connection - use internal Docker networking
+        let ollamaTestUrl = url;
+        if (url && url.includes('localhost')) {
+          ollamaTestUrl = url.replace('localhost', 'ollama');
+        }
+        const ollamaResponse = await fetch(`${ollamaTestUrl}/api/tags`, {
           timeout: 5000
         }).catch(e => ({ ok: false, error: e.message }));
         
@@ -953,6 +959,235 @@ serverBootstrap().then(() => {
       res.status(500).json({ error: 'Failed to retrieve rate limit metrics' });
     }
   });
+
+  // User Settings API endpoints
+  app.get('/api/user/settings', withTenant, async (req, res) => {
+    try {
+      const db = require('../../../lib/db-connector').getPool();
+      const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId, 10) : req.user.userId;
+      const tenantId = req.tenantId;
+      
+      const result = await db.query(
+        'SELECT settings FROM user_settings WHERE user_id = $1 AND tenant_id = $2',
+        [userId, tenantId]
+      );
+      
+      if (result.rows.length > 0) {
+        // Decrypt settings before sending to client
+        const decryptedSettings = security.decryptSettings(result.rows[0].settings);
+        res.json({ settings: decryptedSettings });
+      } else {
+        // Return default settings
+        const defaultSettings = {
+          llm: { provider: 'ollama', url: 'http://ollama:11434', model: 'llama3.2' },
+          appearance: { theme: 'blue', starfield: true, effects3d: true },
+          system: { autosave: true, jobTimeout: 300 }
+        };
+        res.json({ settings: defaultSettings });
+      }
+    } catch (error) {
+      console.error('[SETTINGS] Get settings error:', error);
+      res.status(500).json({ error: 'Failed to retrieve settings' });
+    }
+  });
+
+  app.post('/api/user/settings', withTenant, async (req, res) => {
+    try {
+      const db = require('../../../lib/db-connector').getPool();
+      const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId, 10) : req.user.userId;
+      const tenantId = req.tenantId;
+      const { settings } = req.body;
+      
+      if (!settings || typeof settings !== 'object') {
+        return res.status(400).json({ error: 'Invalid settings object' });
+      }
+      
+      // Encrypt sensitive settings before storing
+      const encryptedSettings = security.encryptSettings(settings);
+      
+      // Get old settings for audit
+      const oldResult = await db.query(
+        'SELECT settings FROM user_settings WHERE user_id = $1 AND tenant_id = $2',
+        [userId, tenantId]
+      );
+      const oldSettings = oldResult.rows.length > 0 ? oldResult.rows[0].settings : null;
+      
+      // Upsert settings
+      await db.query(`
+        INSERT INTO user_settings (user_id, tenant_id, settings, updated_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (user_id, tenant_id)
+        DO UPDATE SET settings = $3, updated_at = NOW()
+      `, [userId, tenantId, JSON.stringify(encryptedSettings)]);
+      
+      // Log audit event
+      await logAuditEvent(db, userId, tenantId, 'UPDATE', 'user_settings', userId.toString(), oldSettings, settings, req);
+      
+      res.json({ success: true, message: 'Settings saved successfully' });
+    } catch (error) {
+      console.error('[SETTINGS] Save settings error:', error);
+      res.status(500).json({ error: 'Failed to save settings' });
+    }
+  });
+
+  app.delete('/api/user/settings', withTenant, async (req, res) => {
+    try {
+      const db = require('../../../lib/db-connector').getPool();
+      const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId, 10) : req.user.userId;
+      const tenantId = req.tenantId;
+      
+      await db.query(
+        'DELETE FROM user_settings WHERE user_id = $1 AND tenant_id = $2',
+        [userId, tenantId]
+      );
+      
+      res.json({ success: true, message: 'Settings reset successfully' });
+    } catch (error) {
+      console.error('[SETTINGS] Delete settings error:', error);
+      res.status(500).json({ error: 'Failed to reset settings' });
+    }
+  });
+
+  // Enhanced System Health Monitoring endpoint
+  app.get('/api/health/detailed', withTenant, async (req, res) => {
+    try {
+      const db = require('../../../lib/db-connector').getPool();
+      
+      // Get system metrics
+      const systemMetrics = {
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        cpu: process.cpuUsage(),
+        platform: process.platform,
+        nodeVersion: process.version
+      };
+      
+      // Database health check with metrics
+      let dbMetrics = { healthy: false, error: null, connections: 0 };
+      try {
+        const dbResult = await db.query(`
+          SELECT 
+            count(*) as total_connections,
+            count(*) FILTER (WHERE state = 'active') as active_connections
+          FROM pg_stat_activity 
+          WHERE datname = current_database()
+        `);
+        dbMetrics = {
+          healthy: true,
+          connections: dbResult.rows[0].total_connections,
+          activeConnections: dbResult.rows[0].active_connections,
+          size: await getDatabaseSize(db)
+        };
+      } catch (error) {
+        dbMetrics.error = error.message;
+      }
+      
+      // Redis health check with metrics
+      let redisMetrics = { healthy: false, error: null, memory: 0, keys: 0 };
+      try {
+        await redisClient.ping();
+        const info = await redisClient.info('memory');
+        const keyCount = await redisClient.dbSize();
+        redisMetrics = {
+          healthy: true,
+          memory: parseRedisMemory(info),
+          keys: keyCount
+        };
+      } catch (error) {
+        redisMetrics.error = error.message;
+      }
+      
+      // Job queue metrics
+      let jobMetrics = { total: 0, byStatus: {} };
+      try {
+        const jobResult = await db.query(`
+          SELECT status, COUNT(*) as count
+          FROM jobs 
+          WHERE tenant_id = $1
+          GROUP BY status
+        `, [req.tenantId]);
+        
+        jobMetrics.total = jobResult.rows.reduce((sum, row) => sum + parseInt(row.count), 0);
+        jobResult.rows.forEach(row => {
+          jobMetrics.byStatus[row.status] = parseInt(row.count);
+        });
+      } catch (error) {
+        console.error('Job metrics error:', error);
+      }
+      
+      // WebSocket connections
+      const wsMetrics = {
+        connected: wss ? wss.clients.size : 0,
+        status: wss ? 'active' : 'inactive'
+      };
+      
+      // Overall health calculation
+      const overallHealthy = dbMetrics.healthy && redisMetrics.healthy;
+      
+      const healthData = {
+        status: overallHealthy ? "healthy" : "degraded",
+        timestamp: new Date().toISOString(),
+        system: systemMetrics,
+        database: dbMetrics,
+        redis: redisMetrics,
+        jobs: jobMetrics,
+        websocket: wsMetrics,
+        tenant: {
+          id: req.tenantId,
+          user: req.user.userId
+        }
+      };
+      
+      res.status(overallHealthy ? 200 : 503).json(healthData);
+    } catch (error) {
+      console.error('[HEALTH] Detailed health check failed:', error);
+      res.status(503).json({
+        status: "unhealthy",
+        timestamp: new Date().toISOString(),
+        error: error.message
+      });
+    }
+  });
+
+  // Helper functions for health monitoring
+  async function getDatabaseSize(db) {
+    try {
+      const result = await db.query(`
+        SELECT pg_size_pretty(pg_database_size(current_database())) as size
+      `);
+      return result.rows[0].size;
+    } catch {
+      return 'Unknown';
+    }
+  }
+  
+  function parseRedisMemory(info) {
+    const match = info.match(/used_memory:(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  }
+
+  // Audit logging function
+  async function logAuditEvent(db, userId, tenantId, action, resourceType, resourceId, oldValues, newValues, req) {
+    try {
+      await db.query(`
+        INSERT INTO audit_log (user_id, tenant_id, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [
+        userId,
+        tenantId,
+        action,
+        resourceType,
+        resourceId,
+        oldValues ? JSON.stringify(oldValues) : null,
+        newValues ? JSON.stringify(newValues) : null,
+        req.ip || null,
+        req.get('User-Agent') || null
+      ]);
+    } catch (error) {
+      console.error('[AUDIT] Failed to log audit event:', error);
+    }
+  }
 
   // 404 for unknown routes
   app.use((req, res) => {
