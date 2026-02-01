@@ -29,6 +29,11 @@ app.get('/', (req, res) => {
   }
 });
 
+// Serve settings page
+app.get('/settings', (req, res) => {
+  res.sendFile(path.join(__dirname, 'settings.html'));
+});
+
 // Serve API test studio
 app.get('/test-api', (req, res) => {
   res.sendFile(path.join(__dirname, 'test-api.html'));

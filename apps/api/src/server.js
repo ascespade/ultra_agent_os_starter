@@ -376,7 +376,126 @@ app.get('/api/adapters/status', withTenant, async (req, res) => {
 });
 
 
-// Input validation middleware
+// Test LLM adapter configuration
+app.post('/api/adapters/test', authenticateToken, async (req, res) => {
+  const { provider, url, model, apiKey } = req.body;
+  
+  try {
+    let result = {};
+    
+    switch (provider) {
+      case 'ollama':
+        // Test Ollama connection
+        const ollamaResponse = await fetch(`${url}/api/tags`, {
+          timeout: 5000
+        }).catch(e => ({ ok: false, error: e.message }));
+        
+        if (ollamaResponse.ok) {
+          result = { 
+            success: true, 
+            message: `Ollama connected successfully. Model: ${model}`,
+            provider: 'ollama'
+          };
+        } else {
+          result = { 
+            success: false, 
+            message: `Failed to connect to Ollama at ${url}`,
+            error: ollamaResponse.error
+          };
+        }
+        break;
+        
+      case 'openai':
+        // Test OpenAI connection
+        const openaiResponse = await fetch('https://api.openai.com/v1/models', {
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          timeout: 5000
+        }).catch(e => ({ ok: false, error: e.message }));
+        
+        if (openaiResponse.ok) {
+          result = { 
+            success: true, 
+            message: `OpenAI API connection successful. Model: ${model}`,
+            provider: 'openai'
+          };
+        } else {
+          result = { 
+            success: false, 
+            message: 'Invalid OpenAI API key or connection failed',
+            error: openaiResponse.error
+          };
+        }
+        break;
+        
+      case 'gemini':
+        // Test Gemini connection
+        const geminiResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+          { timeout: 5000 }
+        ).catch(e => ({ ok: false, error: e.message }));
+        
+        if (geminiResponse.ok) {
+          result = { 
+            success: true, 
+            message: `Gemini API connection successful. Model: ${model}`,
+            provider: 'gemini'
+          };
+        } else {
+          result = { 
+            success: false, 
+            message: 'Invalid Gemini API key or connection failed',
+            error: geminiResponse.error
+          };
+        }
+        break;
+        
+      case 'claude':
+        // Test Claude connection
+        const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: model,
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'test' }]
+          }),
+          timeout: 5000
+        }).catch(e => ({ ok: false, error: e.message }));
+        
+        if (claudeResponse.ok || claudeResponse.status === 401) {
+          result = { 
+            success: claudeResponse.ok, 
+            message: claudeResponse.ok ? 
+              `Claude API connection successful. Model: ${model}` :
+              'Claude API responded (authentication check)',
+            provider: 'claude'
+          };
+        } else {
+          result = { 
+            success: false, 
+            message: 'Invalid Claude API key or connection failed',
+            error: claudeResponse.error
+          };
+        }
+        break;
+        
+      default:
+        return res.status(400).json({ error: 'Unknown provider' });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('[API] Adapter test failed:', error);
+    res.status(500).json({ 
+      error: 'Test failed',
+      message: error.message
+    });
+  }
+});
 function validateInput(req, res, next) {
   const { message } = req.body;
   

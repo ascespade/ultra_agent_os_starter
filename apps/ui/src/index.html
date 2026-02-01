@@ -9,20 +9,20 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  /* Modern vibrant palette */
-  --primary: #0a0e27;
-  --secondary: #141829;
-  --accent: #00d4ff;
-  --accent-dark: #00b8d4;
-  --accent-muted: rgba(0, 212, 255, 0.15);
+  /* Night Sky Palette - كحلي مع نجوم */
+  --primary: #0a1428;
+  --secondary: #1a2847;
+  --accent: #4a9eff;
+  --accent-dark: #3a7ee6;
+  --accent-muted: rgba(74, 158, 255, 0.15);
   --success: #10b981;
   --warning: #f97316;
   --error: #ef4444;
-  --background: #0a0e27;
-  --surface: #141829;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --border: rgba(148, 163, 184, 0.2);
+  --background: #0a1428;
+  --surface: #1a2847;
+  --text-primary: #e8f1ff;
+  --text-secondary: #7fa3c8;
+  --border: rgba(79, 122, 184, 0.2);
 }
 
 * {
@@ -31,13 +31,62 @@
   box-sizing: border-box;
 }
 
+/* Starfield Animation */
+@keyframes twinkle {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 0.3;
+  }
+  20%, 24%, 55% {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-3d {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, -2px, 10px) scale(1.1);
+    opacity: 0.3;
+  }
+}
+
+/* Star particles */
+.star {
+  position: absolute;
+  background: radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.3) 100%);
+  border-radius: 50%;
+  animation: twinkle 3s infinite, pulse-3d 4s infinite ease-in-out;
+  box-shadow: 0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(74, 158, 255, 0.3);
+}
+
 body {
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--background);
+  background: linear-gradient(135deg, #0a1428 0%, #0f1f3c 30%, #1a2847 60%, #0a1428 100%);
   color: var(--text-primary);
   font-weight: 400;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(74, 158, 255, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(74, 158, 255, 0.03) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 #root {
@@ -47,6 +96,8 @@ body {
   height: 100vh;
   gap: 0;
   background: var(--background);
+  position: relative;
+  z-index: 2;
 }
 
 .app-header {
@@ -127,10 +178,15 @@ body {
 }
 
 .panel {
-  background: var(--surface);
+  background: linear-gradient(135deg, rgba(26, 40, 71, 0.9) 0%, rgba(26, 40, 71, 0.7) 100%);
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border);
+  box-shadow: 
+    inset 0 0 20px rgba(74, 158, 255, 0.1),
+    0 20px 40px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(74, 158, 255, 0.05);
+  position: relative;
 }
 
 .panel:first-of-type {
@@ -802,6 +858,11 @@ body {
   <header class="app-header">
     <h1>Ultra Agent OS</h1>
     <span class="badge">Agent Terminal</span>
+    <div style="margin-left: auto; display: flex; gap: 12px;">
+      <a href="/settings" style="padding: 6px 12px; border: 1px solid var(--border); background: var(--primary); color: var(--text-primary); border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s ease; text-decoration: none; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--accent')" onmouseout="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--primary')">
+        ⚙️ Settings
+      </a>
+    </div>
   </header>
   <div id="chat" class="panel">
     <div class="panel-header">
