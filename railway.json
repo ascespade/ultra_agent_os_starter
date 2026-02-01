@@ -25,19 +25,15 @@
         "REDIS_URL": "${{Redis.REDIS_URL}}",
         "NODE_ENV": "production",
         "HOST": "0.0.0.0",
-        "INTERNAL_API_KEY": {
-          "generate": true
-        },
-        "JWT_SECRET": {
-          "generate": true
-        },
-        "DEFAULT_ADMIN_PASSWORD": {
-          "generate": true
-        },
+        "INTERNAL_API_KEY": "${{INTERNAL_API_KEY}}",
+        "JWT_SECRET": "${{JWT_SECRET}}",
+        "DEFAULT_ADMIN_PASSWORD": "${{DEFAULT_ADMIN_PASSWORD}}",
         "DATA_DIR": "/data/agent",
         "OLLAMA_URL": {
           "defaultValue": ""
-        }
+        },
+        "UI_ENABLED": "true",
+        "UI_PATH": "/ui"
       }
     },
     {
@@ -50,29 +46,13 @@
       "env": {
         "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
         "REDIS_URL": "${{Redis.REDIS_URL}}",
-        "INTERNAL_API_KEY": {
-          "generate": true
-        },
-        "JWT_SECRET": {
-          "generate": true
-        },
+        "INTERNAL_API_KEY": "${{INTERNAL_API_KEY}}",
+        "JWT_SECRET": "${{JWT_SECRET}}",
         "NODE_ENV": "production",
         "DATA_DIR": "/data/agent",
         "OLLAMA_URL": {
           "defaultValue": ""
         }
-      }
-    },
-    {
-      "name": "ultra-agent-ui",
-      "source": ".",
-      "dockerfilePath": "apps/ui/Dockerfile",
-      "environment": [
-        "production"
-      ],
-      "env": {
-        "API_URL": "${{ultra-agent-api.RAILWAY_PUBLIC_URL}}",
-        "NODE_ENV": "production"
       }
     }
   ],

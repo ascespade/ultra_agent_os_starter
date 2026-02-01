@@ -1,0 +1,14 @@
+{
+  "decision": "NOT_READY",
+  "reason": "CRITICAL_ENVIRONMENT_FAILURE",
+  "details": {
+    "phase": "PHASE_0",
+    "error": "Node.js executable not found in PATH",
+    "timestamp": "2026-02-01T13:45:00Z"
+  },
+  "metrics": {
+    "functional_pass_rate": 0,
+    "stability_score": 0,
+    "architecture_score": 0
+  }
+}

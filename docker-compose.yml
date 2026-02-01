@@ -42,25 +42,12 @@ services:
       - JWT_SECRET=ultra-agent-jwt-secret-change-in-production
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/ultra_agent
       - DEFAULT_ADMIN_PASSWORD=SecureAdminPassword2024!
+      - UI_ENABLED=true
+      - UI_PATH=/ui
     depends_on: [postgres, redis, ollama]
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
-
-  ui:
-    build:
-      context: .
-      dockerfile: ./apps/ui/Dockerfile
-    environment:
-      # Browser needs host URL; API is mapped to localhost:3000 on host
-      - API_URL=http://localhost:3000
-      - PORT=8088
-      - UI_PORT=4000
-    ports:
-      # UI listens on 4000 (port-allocator range); map host 8088 -> container 4000
-      - "127.0.0.1:8088:4000"
-    depends_on: [api]
-    restart: unless-stopped
 
   worker:
     build:
