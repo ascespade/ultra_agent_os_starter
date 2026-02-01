@@ -64,28 +64,58 @@ function writeMemoryFile(filename, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
+const StateMachine = require('../../../lib/state-machine');
+
 async function updateJobStatus(jobId, tenantId, status, updates = {}) {
   const db = require('../../../lib/db-connector').getPool();
   const redisKey = `tenant:${tenantId}:job:${jobId}`;
+  
   try {
-    // CRITICAL FIX: Verify update actually affected a row
+    // 1. Get current status first for validation
+    const currentJob = await db.query(
+      'SELECT status FROM jobs WHERE id = $1 AND tenant_id = $2',
+      [jobId, tenantId]
+    );
+
+    if (currentJob.rows.length === 0) {
+      console.warn(`[WORKER] Job ${jobId} not found, cannot update to ${status}`);
+      return;
+    }
+
+    const currentStatus = currentJob.rows[0].status;
+
+    // 2. Validate transition (CRITICAL FIX)
+    try {
+      StateMachine.validateTransition(currentStatus, status);
+    } catch (validationError) {
+      console.error(`[WORKER] Invalid state transition blocked: ${validationError.message}`);
+      // Don't update DB if invalid transition, but maybe log it?
+      return; 
+    }
+
+    // 3. Update with optimistic locking (ensure status hasn't changed since read)
     const result = await db.query(`
       UPDATE jobs 
       SET status = $1, output_data = $2, error_message = $3, updated_at = NOW()
-      WHERE id = $4 AND tenant_id = $5
+      WHERE id = $4 AND tenant_id = $5 AND status = $6
       RETURNING id
     `, [
       status,
       JSON.stringify(updates),
       updates.error || null,
       jobId,
-      tenantId
+      tenantId,
+      currentStatus // Optimistic locking check
     ]);
     
     if (result.rows.length === 0) {
-      console.warn(`[WORKER] WARNING: Job status update affected 0 rows for ${jobId} (status=${status})`);
+      console.warn(`[WORKER] Concurrent modification detected for ${jobId}. Expected status ${currentStatus}, but it changed.`);
+      // Retry could be implemented here, but for now we warn
+    } else {
+      console.log(`[WORKER] Job ${jobId} transitioned: ${currentStatus} -> ${status}`);
     }
     
+    // 4. Update Redis (best effort)
     const jobData = await redisClient.hGet(redisKey, 'data');
     if (jobData) {
       const job = JSON.parse(jobData);
@@ -96,7 +126,7 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
     }
   } catch (error) {
     console.error('[DATABASE] Failed to update job status:', error);
-    throw error; // Propagate error so caller knows about failure
+    throw error;
   }
 }
 
