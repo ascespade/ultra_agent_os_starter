@@ -59,6 +59,8 @@ async function ollamaRequest(prompt) {
         temperature: 0.1,
         num_predict: 100
       }
+    }, {
+      timeout: 10000 // 10 second timeout
     });
     return { success: true, data: response.data };
   } catch (error) {
@@ -92,7 +94,7 @@ test.describe('ULTRA_AGENT_OS Functional Tests', () => {
       }
     });
 
-    test('Ollama Service Availability', async () => {
+    test('Ollama Service Availability', { timeout: 15000 }, async () => {
       const result = await ollamaRequest('Hello');
       
       if (result.success) {
