@@ -738,8 +738,10 @@ serverBootstrap().then(() => {
   
   // Now start the server after rate limiting is configured
   initializeDefaultUser().then(async () => {
-    // Use Railway PORT or default to 3000 for Railway compatibility
-    const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+    // Use dynamic port allocation with Railway compatibility
+    // Railway provides PORT env var, otherwise use our dynamic system
+    const railwayPort = process.env.PORT ? parseInt(process.env.PORT) : null;
+    const PORT = await getAvailablePort('api', railwayPort || 3000);
     const WS_PORT = await getAvailablePort('websocket', 3011);
     
     // Listen on all interfaces for Railway deployment
