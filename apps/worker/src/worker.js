@@ -503,7 +503,7 @@ async function workerLoop() {
       }
       const queueKeys = tenants.map(t => `tenant:${t}:job_queue`);
       const timeout = 10;
-      const jobData = await redisClient.blPop(queueKeys, timeout);
+      const jobData = await redisClient.blPop(...queueKeys, timeout);
       
       if (jobData) {
         idleCount = 0;
