@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { initializeDatabase, testConnection } = require('../lib/db-connector');
 const { CircuitBreaker } = require('../lib/rate-limiter');
+const { getEnvProfile } = require('../config/env-profiles');
 
 const REDIS_URL = process.env.REDIS_URL;
 const DATA_DIR = process.env.DATA_DIR || '/data/agent';
@@ -441,8 +442,9 @@ async function recoverStuckJobs() {
 }
 
 // Core Worker Bootstrap
-// Ensures worker can start even if adapters are unavailable
 async function workerBootstrap() {
+  const profile = getEnvProfile();
+  console.log(`[ENV] Profile: ${profile.env} (logging=${profile.logging}, limits=${profile.limits}, dry_run=${profile.dry_run})`);
   console.log('[CORE] Worker starting...');
   
   // Initialize database connection

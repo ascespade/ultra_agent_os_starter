@@ -613,9 +613,10 @@ async function serverBootstrap() {
 
 // Initialize default user before starting server
 serverBootstrap().then(() => {
-  // Initialize rate limiting after Redis is connected
+  const profile = getEnvProfile();
+  console.log(`[ENV] Profile: ${profile.env} (logging=${profile.logging}, limits=${profile.limits})`);
   console.log('[RATE_LIMIT] Initializing professional rate limiting system...');
-  const rateLimitOrchestrator = new RateLimitOrchestrator(redisClient);
+  const rateLimitOrchestrator = new RateLimitOrchestrator(redisClient, profile.limitsConfig);
   
   // Rate limiting with tenant-prefixed keys (ISOLATION_RULES.redis)
   const tenantRateKey = (req) => `tenant:${(req.headers['x-tenant-id'] || 'none').trim()}:${req.user?.userId || req.ip}`;
@@ -643,7 +644,7 @@ serverBootstrap().then(() => {
     // Listen on localhost only to prevent network issues when Tailscale is off
     const HOST = process.env.HOST || '127.0.0.1';
     app.listen(PORT, HOST, () => {
-      console.log(`[CORE] Ultra Agent API running on ${HOST}:${PORT}`);
+      console.log(`[CORE] Ultra Agent API running on ${HOST}:${PORT} (env=${profile.env})`);
       console.log(`[CORE] WebSocket server running on port ${WS_PORT}`);
       console.log(`[SECURITY] Authentication system active`);
       console.log(`[DATABASE] PostgreSQL integration active`);
