@@ -13,6 +13,21 @@ logs/
 .env
 .env.local
 .env.production
+.env.docker
+.env.test
+
+# Generated secrets and keys
+*-secrets.json
+*-config.json
+k8s-secrets.yaml
+railway-secrets.json
+tenant-*-config.json
+
+# Auto-generated files
+auto-key-generator.js
+project-generator-v1.0.0/
+reports/
+tenant-*
 
 # IDE
 .vscode/

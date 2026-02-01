@@ -116,26 +116,11 @@ function requireTenant(req, res, next) {
   next();
 }
 
-// Initialize default user with security guard
+// Initialize default user with automatic bootstrap
 async function initializeDefaultUser() {
   const db = require('../lib/db-connector').getPool();
   
   try {
-    // Security: Require explicit password for default user creation
-    const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD;
-    
-    if (!defaultPassword) {
-      console.log('[SECURITY] No DEFAULT_ADMIN_PASSWORD provided - skipping default user creation');
-      console.log('[SECURITY] Set DEFAULT_ADMIN_PASSWORD to create default admin user');
-      return;
-    }
-    
-    if (defaultPassword === 'admin123' || defaultPassword.length < 8) {
-      console.error('[SECURITY] Default admin password is too weak');
-      console.error('[SECURITY] Use a stronger password for DEFAULT_ADMIN_PASSWORD');
-      return;
-    }
-    
     // Check if admin user already exists
     const existingUser = await db.query('SELECT id FROM users WHERE username = $1 AND tenant_id = $2', ['admin', 'default']);
     if (existingUser.rows.length > 0) {
@@ -143,13 +128,22 @@ async function initializeDefaultUser() {
       return;
     }
     
-    const defaultPasswordHash = await bcrypt.hash(defaultPassword, 10);
+    // Generate secure password automatically
+    const generatedPassword = require('crypto').randomBytes(16).toString('hex');
+    const defaultPasswordHash = await bcrypt.hash(generatedPassword, 10);
+    
     await db.query(
       'INSERT INTO users (username, password_hash, tenant_id, role) VALUES ($1, $2, $3, $4)',
       ['admin', defaultPasswordHash, 'default', 'admin']
     );
     
-    console.log('[SECURITY] Default admin user created in database');
+    console.log('[SECURITY] Admin user created in database');
+    console.log('[SECURITY] ==============================================');
+    console.log('[SECURITY] ⚠️  ADMIN BOOTSTRAP - SAVE THIS PASSWORD ⚠️');
+    console.log('[SECURITY] Username: admin');
+    console.log(`[SECURITY] Password: ${generatedPassword}`);
+    console.log('[SECURITY] ==============================================');
+    console.log('[SECURITY] This password will not be shown again!');
   } catch (error) {
     console.error('[SECURITY] Failed to create default user:', error);
   }
