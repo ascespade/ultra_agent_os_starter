@@ -1,31 +1,32 @@
-require('dotenv').config({ path: '../../.env' });
+// Production environment validation and dotenv handling
+const { validateProductionEnv, getEnvironmentProfile } = require('../../../lib/production-env-validator');
+
+// Perform strict production environment validation
+validateProductionEnv();
+
 const redis = require('redis');
 const axios = require('axios');
 const Docker = require('dockerode');
 const path = require('path');
 const fs = require('fs');
-const { initializeDatabase, testConnection } = require('../lib/db-connector');
-const { CircuitBreaker } = require('../lib/rate-limiter');
-const { getEnvProfile } = require('../lib/env-profiles');
+const { initializeDatabase, testConnection } = require('../../../lib/db-connector');
+const { CircuitBreaker } = require('../../../lib/rate-limiter');
+const { getEnvProfile } = require('../../../config/env-profiles');
 
+// Use validated environment variables
 const REDIS_URL = process.env.REDIS_URL;
+const DATABASE_URL = process.env.DATABASE_URL;
 const DATA_DIR = process.env.DATA_DIR || '/data/agent';
 const OLLAMA_URL = process.env.OLLAMA_URL;
 
-// Railway environment variables fallback
-if (!REDIS_URL && process.env.RAILWAY_ENVIRONMENT) {
-  console.log('[REDIS] Using Railway Redis URL');
-  process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379/0';
-}
-
 // Redis connection with runtime guard
-if (!process.env.REDIS_URL) {
+if (!REDIS_URL) {
   console.error('[REDIS] REDIS_URL environment variable is required');
   console.error('[REDIS] Set REDIS_URL to Redis connection string');
   process.exit(1);
 }
 
-const redisClient = redis.createClient({ url: REDIS_URL });
+const redisClient = redis.createClient({ url: process.env.REDIS_URL });
 const docker = new Docker();
 const ollamaCircuitBreaker = new CircuitBreaker(5, 30); // 5 failures, 30s cooldown
 

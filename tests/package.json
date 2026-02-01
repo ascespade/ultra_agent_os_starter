@@ -1,0 +1,14 @@
+{
+  "name": "ultra-agent-os-tests",
+  "version": "1.0.0",
+  "description": "Playwright tests for Ultra Agent OS production dashboard",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "install:browsers": "playwright install"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

@@ -1,5 +1,10 @@
 
-require('dotenv').config({ path: '../../.env' });
+// Production environment validation and dotenv handling
+const { validateProductionEnv, getEnvironmentProfile } = require('../../../lib/production-env-validator');
+
+// Perform strict production environment validation
+validateProductionEnv();
+
 const express = require('express');
 const redis = require('redis');
 const WebSocket = require('ws');
@@ -18,6 +23,10 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 
+// Use validated environment variables
+const REDIS_URL = process.env.REDIS_URL;
+const DATABASE_URL = process.env.DATABASE_URL;
+
 // JWT Secret with runtime guard
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -35,7 +44,6 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-const REDIS_URL = process.env.REDIS_URL;
 const DATA_DIR = process.env.DATA_DIR || './data';
 const OLLAMA_URL = process.env.OLLAMA_URL;
 
