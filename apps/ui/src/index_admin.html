@@ -535,28 +535,36 @@ body {
     </div>
   </div>
 
-  <!-- Navigation Panel -->
+  <!-- Navigation Panel: mandatory sections -->
   <div id="navigation" class="panel">
     <div class="panel-content">
-      <div class="nav-item active" data-view="dashboard" onclick="showView('dashboard')">
+      <div class="nav-item active" data-view="overview" onclick="showView('overview')">
         <span class="nav-icon">📊</span>
-        <span>Dashboard</span>
+        <span>System Overview</span>
       </div>
       <div class="nav-item" data-view="jobs" onclick="showView('jobs')">
         <span class="nav-icon">⚡</span>
-        <span>Jobs</span>
+        <span>Jobs &amp; Workers</span>
       </div>
-      <div class="nav-item" data-view="users" onclick="showView('users')">
-        <span class="nav-icon">👥</span>
-        <span>Users</span>
+      <div class="nav-item" data-view="dbredis" onclick="showView('dbredis')">
+        <span class="nav-icon">🗄️</span>
+        <span>Database &amp; Redis</span>
       </div>
-      <div class="nav-item" data-view="system" onclick="showView('system')">
-        <span class="nav-icon">⚙️</span>
-        <span>System</span>
+      <div class="nav-item" data-view="integrations" onclick="showView('integrations')">
+        <span class="nav-icon">🔌</span>
+        <span>Integrations</span>
+      </div>
+      <div class="nav-item" data-view="security" onclick="showView('security')">
+        <span class="nav-icon">🔒</span>
+        <span>Security &amp; Auth</span>
       </div>
       <div class="nav-item" data-view="config" onclick="showView('config')">
         <span class="nav-icon">🔧</span>
         <span>Configuration</span>
+      </div>
+      <div class="nav-item" data-view="errors" onclick="showView('errors')">
+        <span class="nav-icon">⚠️</span>
+        <span>Errors &amp; Alerts</span>
       </div>
     </div>
   </div>
@@ -586,10 +594,10 @@ body {
     </div>
   </div>
 
-  <!-- Logs Panel -->
+  <!-- Live Logs Panel (WebSocket) -->
   <div id="logs" class="panel">
     <div class="panel-header">
-      <h3>Live Logs</h3>
+      <h3>Live Logs (WebSocket)</h3>
       <button class="btn" onclick="clearLogs()">Clear</button>
     </div>
     <div class="log-container" id="log-container">
@@ -648,16 +656,20 @@ class AdminControlPlane {
       if (response.ok) {
         const data = await response.json();
         this.authToken = data.token;
+        this.user = data.user || { username: username, role: 'admin' };
         localStorage.setItem('authToken', this.authToken);
         closeModal();
-        await this.loadWorkspace();
+        await this.refreshData();
         this.connectWebSocket();
         this.startAutoRefresh();
       } else {
-        throw new Error('Login failed');
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || 'Login failed');
       }
     } catch (error) {
       console.error('Login error:', error);
+      this.addError('Login failed', error.message);
+      this.addLog('ERROR', 'Login failed: ' + error.message);
       alert('Login failed. Please check your credentials.');
     }
   }
@@ -699,20 +711,47 @@ class AdminControlPlane {
     };
   }
 
-  async loadWorkspace() {
+  async refreshData() {
+    await Promise.all([this.fetchStatus(), this.fetchJobs()]);
+    this.updateSystemStatus();
+    this.loadCurrentView();
+  }
+
+  async fetchStatus() {
     try {
-      const response = await fetch(`${window.API_URL}/api/workspace`, {
+      const response = await fetch(`${window.API_URL}/api/adapters/status`, {
         headers: { 'Authorization': `Bearer ${this.authToken}` }
       });
-      
-      if (response.ok) {
-        this.systemData = await response.json();
-        this.updateSystemStatus();
-        this.loadCurrentView();
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Status check failed');
       }
+      this.status = await response.json();
     } catch (error) {
-      console.error('Failed to load workspace:', error);
+      this.addError('Adapter status', error.message);
+      this.addLog('ERROR', 'Failed to fetch status: ' + error.message);
+      this.status = null;
     }
+  }
+
+  async fetchJobs() {
+    try {
+      const response = await fetch(`${window.API_URL}/api/jobs`, {
+        headers: { 'Authorization': `Bearer ${this.authToken}` }
+      });
+      if (!response.ok) throw new Error('Jobs fetch failed');
+      this.jobs = await response.json();
+    } catch (error) {
+      this.addError('Jobs list', error.message);
+      this.addLog('ERROR', 'Failed to fetch jobs: ' + error.message);
+      this.jobs = [];
+    }
+  }
+
+  addError(title, message) {
+    this.errors.push({ title, message, at: new Date().toISOString() });
+    if (this.errors.length > 100) this.errors.shift();
+    this.loadCurrentView();
   }
 
   connectWebSocket() {
@@ -738,39 +777,36 @@ class AdminControlPlane {
     
     this.websocket.onerror = (error) => {
       console.error('WebSocket error:', error);
+      this.addError('WebSocket', 'Connection error');
       this.addLog('ERROR', 'WebSocket connection error');
     };
   }
 
   handleWebSocketMessage(data) {
     if (data.type === 'log') {
-      this.addLog(data.level || 'INFO', data.message);
+      const msg = data.message != null ? data.message : (data.description || JSON.stringify(data));
+      this.addLog(data.level || 'INFO', msg);
     } else if (data.type === 'job_status') {
-      this.updateJobStatus(data.jobId, data);
-    } else if (data.type === 'system_status') {
-      this.updateSystemStatus(data);
+      this.addLog('INFO', `Job ${data.jobId}: ${data.status || ''}`);
+    } else {
+      this.addLog('INFO', JSON.stringify(data));
     }
   }
 
   addLog(level, message) {
     const container = document.getElementById('log-container');
     const timestamp = new Date().toLocaleTimeString();
-    
+    const text = typeof message === 'string' ? message : (message && typeof message === 'object' ? (message.description || message.message || JSON.stringify(message)) : String(message));
     const logEntry = document.createElement('div');
     logEntry.className = 'log-entry';
     logEntry.innerHTML = `
       <span class="log-timestamp">${timestamp}</span>
       <span class="log-level ${level}">${level}</span>
-      <span class="log-message">${message}</span>
+      <span class="log-message">${text.replace(/</g, '&lt;')}</span>
     `;
-    
     container.appendChild(logEntry);
     container.scrollTop = container.scrollHeight;
-    
-    // Keep only last 100 logs
-    while (container.children.length > 100) {
-      container.removeChild(container.firstChild);
-    }
+    while (container.children.length > 100) container.removeChild(container.firstChild);
   }
 
   clearLogs() {
@@ -780,8 +816,8 @@ class AdminControlPlane {
 
   startAutoRefresh() {
     this.refreshInterval = setInterval(() => {
-      this.loadWorkspace();
-    }, 30000); // Refresh every 30 seconds
+      this.refreshData();
+    }, 30000);
   }
 
   showView(viewName) {
@@ -802,170 +838,240 @@ class AdminControlPlane {
 
   loadCurrentView() {
     const content = document.getElementById('view-content');
-    
+    const titles = { overview: 'System Overview', jobs: 'Jobs & Workers', dbredis: 'Database & Redis', integrations: 'Integrations Status', security: 'Security & Auth Health', config: 'Configuration (read-only)', errors: 'Error & Alerts View' };
+    document.getElementById('view-title').textContent = titles[this.currentView] || this.currentView;
     switch (this.currentView) {
-      case 'dashboard':
-        this.loadDashboard(content);
-        break;
-      case 'jobs':
-        this.loadJobs(content);
-        break;
-      case 'users':
-        this.loadUsers(content);
-        break;
-      case 'system':
-        this.loadSystem(content);
-        break;
-      case 'config':
-        this.loadConfig(content);
-        break;
+      case 'overview': this.loadOverview(content); break;
+      case 'jobs': this.loadJobs(content); break;
+      case 'dbredis': this.loadDbRedis(content); break;
+      case 'integrations': this.loadIntegrations(content); break;
+      case 'security': this.loadSecurity(content); break;
+      case 'config': this.loadConfig(content); break;
+      case 'errors': this.loadErrors(content); break;
+      default: this.loadOverview(content);
     }
   }
 
-  loadDashboard(container) {
+  loadOverview(container) {
+    const s = this.status;
+    if (!s) { container.innerHTML = '<div class="loading">No status data. Click Refresh.</div>'; return; }
+    const core = s.core || {};
+    const redis = s.redis || {};
+    const uptimeSec = core.uptime != null ? Math.floor(core.uptime) : 0;
+    const mem = core.memory || {};
+    const heapMB = mem.heapUsed != null ? (mem.heapUsed / 1024 / 1024).toFixed(1) : '—';
     container.innerHTML = `
       <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-title">Total Jobs</span>
-          <span class="metric-change positive">+12%</span>
-        </div>
-        <div class="metric-value">${this.systemData.totalJobs || 0}</div>
+        <div class="metric-header"><span class="metric-title">Core Status</span></div>
+        <div class="metric-value">${core.status || '—'}</div>
+        <div class="config-item"><span class="config-label">Message</span><span class="config-value">${core.message || '—'}</span></div>
       </div>
-      
       <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-title">Active Jobs</span>
-          <span class="metric-change positive">+5%</span>
-        </div>
-        <div class="metric-value">${this.systemData.activeJobs || 0}</div>
+        <div class="metric-header"><span class="metric-title">Uptime (seconds)</span></div>
+        <div class="metric-value">${uptimeSec}</div>
       </div>
-      
       <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-title">Success Rate</span>
-          <span class="metric-change positive">98.5%</span>
-        </div>
-        <div class="metric-value">${this.systemData.successRate || 0}%</div>
+        <div class="metric-header"><span class="metric-title">Heap Used (MB)</span></div>
+        <div class="metric-value">${heapMB}</div>
       </div>
-      
       <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-title">Queue Depth</span>
-          <span class="metric-change negative">+3</span>
-        </div>
-        <div class="metric-value">${this.systemData.queueDepth || 0}</div>
+        <div class="metric-header"><span class="metric-title">Queue Length</span></div>
+        <div class="metric-value">${redis.queue_length != null ? redis.queue_length : '—'}</div>
+        <div class="config-item"><span class="config-label">Queue Status</span><span class="config-value">${redis.queue_status || '—'}</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-header"><span class="metric-title">Jobs in List</span></div>
+        <div class="metric-value">${this.jobs.length}</div>
       </div>
     `;
   }
 
   loadJobs(container) {
-    const jobs = this.systemData.jobs || [];
-    
-    if (jobs.length === 0) {
-      container.innerHTML = '<div class="loading">No jobs found</div>';
+    if (this.jobDetail) {
+      const j = this.jobDetail;
+      const statusClass = (j.status || '').toLowerCase();
+      container.innerHTML = `
+        <div class="panel-header" style="margin-bottom:16px">
+          <button class="btn" onclick="admin.jobDetail=null; admin.loadCurrentView()">← Back to list</button>
+        </div>
+        <div class="job-item">
+          <div class="job-header">
+            <span class="job-id">${j.id}</span>
+            <span class="job-status ${statusClass}">${j.status}</span>
+          </div>
+          <div class="config-item"><span class="config-label">Type</span><span class="config-value">${j.type || '—'}</span></div>
+          <div class="config-item"><span class="config-label">Created</span><span class="config-value">${j.created_at || '—'}</span></div>
+          <div class="config-item"><span class="config-label">Updated</span><span class="config-value">${j.updated_at || '—'}</span></div>
+          ${j.error_message ? `<div class="config-item"><span class="config-label">Error</span><span class="config-value" style="color:var(--error)">${j.error_message}</span></div>` : ''}
+          <pre class="config-value" style="margin-top:12px;white-space:pre-wrap;word-break:break-all">${JSON.stringify({ input_data: j.input_data, output_data: j.output_data }, null, 2)}</pre>
+        </div>
+      `;
       return;
     }
-    
-    container.innerHTML = jobs.map(job => `
-      <div class="job-item" onclick="admin.selectJob('${job.id}')">
+    if (this.jobs.length === 0) {
+      container.innerHTML = '<div class="loading">No jobs. Data from /api/jobs.</div>';
+      return;
+    }
+    container.innerHTML = this.jobs.map(job => {
+      const msg = (job.input_data && typeof job.input_data === 'object' && job.input_data.message) ? job.input_data.message : (job.input_data && typeof job.input_data === 'string' ? job.input_data : job.id);
+      const statusClass = (job.status || '').toLowerCase();
+      return `<div class="job-item" onclick="admin.selectJob('${job.id}')">
         <div class="job-header">
-          <span class="job-id">${job.id.substring(0, 8)}...</span>
-          <span class="job-status ${job.status}">${job.status}</span>
+          <span class="job-id">${(job.id || '').substring(0, 8)}…</span>
+          <span class="job-status ${statusClass}">${job.status || '—'}</span>
         </div>
-        <div class="job-message">${job.message}</div>
+        <div class="job-message">${String(msg).substring(0, 80)}</div>
         <div class="job-meta">
-          <span>Created: ${new Date(job.created_at).toLocaleString()}</span>
-          <span>Type: ${job.type}</span>
+          <span>${job.created_at ? new Date(job.created_at).toLocaleString() : '—'}</span>
+          <span>${job.type || '—'}</span>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   }
 
-  loadUsers(container) {
-    const users = this.systemData.users || [];
-    
-    container.innerHTML = users.map(user => `
-      <div class="user-item">
-        <div class="user-info">
-          <div class="user-name">${user.username}</div>
-          <div class="user-role">${user.role}</div>
-        </div>
-        <div class="user-actions">
-          <button class="btn" onclick="admin.editUser('${user.id}')">Edit</button>
-          <button class="btn danger" onclick="admin.deleteUser('${user.id}')">Delete</button>
-        </div>
-      </div>
-    `).join('');
+  async selectJob(jobId) {
+    try {
+      const response = await fetch(`${window.API_URL}/api/jobs/${jobId}`, { headers: { 'Authorization': `Bearer ${this.authToken}` } });
+      if (!response.ok) throw new Error('Failed to load job');
+      this.jobDetail = await response.json();
+      this.loadCurrentView();
+    } catch (e) {
+      this.addError('Job detail', e.message);
+      this.addLog('ERROR', 'Job detail: ' + e.message);
+    }
   }
 
-  loadSystem(container) {
+  loadDbRedis(container) {
+    const s = this.status;
+    if (!s) { container.innerHTML = '<div class="loading">No status data. Click Refresh.</div>'; return; }
+    const db = s.database || {};
+    const redis = s.redis || {};
     container.innerHTML = `
       <div class="config-section">
-        <h4>System Information</h4>
+        <h4>Database (PostgreSQL)</h4>
         <div class="config-item">
-          <span class="config-label">Version</span>
-          <span class="config-value">1.0.0</span>
+          <span class="config-label">Status</span>
+          <span class="config-value">
+            <span class="status-indicator ${db.available ? 'status-online' : 'status-offline'}"></span>
+            ${db.status || '—'} ${db.type ? '(' + db.type + ')' : ''}
+          </span>
         </div>
+        ${db.error ? `<div class="config-item"><span class="config-label">Error</span><span class="config-value" style="color:var(--error)">${db.error}</span></div>` : ''}
+      </div>
+      <div class="config-section">
+        <h4>Redis</h4>
         <div class="config-item">
-          <span class="config-label">Uptime</span>
-          <span class="config-value">${this.systemData.uptime || 'Unknown'}</span>
+          <span class="config-label">Status</span>
+          <span class="config-value">
+            <span class="status-indicator ${redis.available ? 'status-online' : 'status-offline'}"></span>
+            ${redis.status || '—'}
+          </span>
         </div>
+        <div class="config-item"><span class="config-label">Queue length</span><span class="config-value">${redis.queue_length != null ? redis.queue_length : '—'}</span></div>
+        <div class="config-item"><span class="config-label">Queue status</span><span class="config-value">${redis.queue_status || '—'}</span></div>
+        ${redis.error ? `<div class="config-item"><span class="config-label">Error</span><span class="config-value" style="color:var(--error)">${redis.error}</span></div>` : ''}
+      </div>
+    `;
+  }
+
+  loadIntegrations(container) {
+    const s = this.status;
+    if (!s || !s.adapters) { container.innerHTML = '<div class="loading">No status data. Click Refresh.</div>'; return; }
+    const a = s.adapters;
+    const ollama = a.ollama || {};
+    const docker = a.docker || {};
+    container.innerHTML = `
+      <div class="config-section">
+        <h4>Ollama (LLM)</h4>
         <div class="config-item">
-          <span class="config-label">Environment</span>
-          <span class="config-value">${this.systemData.environment || 'Unknown'}</span>
+          <span class="config-label">Status</span>
+          <span class="config-value">
+            <span class="status-indicator ${ollama.available ? 'status-online' : 'status-warning'}"></span>
+            ${ollama.status || '—'}
+          </span>
         </div>
       </div>
-      
       <div class="config-section">
-        <h4>Resource Usage</h4>
+        <h4>Docker</h4>
         <div class="config-item">
-          <span class="config-label">Memory Usage</span>
-          <span class="config-value">${this.systemData.memoryUsage || 'Unknown'}</span>
-        </div>
-        <div class="config-item">
-          <span class="config-label">CPU Usage</span>
-          <span class="config-value">${this.systemData.cpuUsage || 'Unknown'}</span>
-        </div>
-        <div class="config-item">
-          <span class="config-label">Disk Usage</span>
-          <span class="config-value">${this.systemData.diskUsage || 'Unknown'}</span>
+          <span class="config-label">Status</span>
+          <span class="config-value">
+            <span class="status-indicator ${docker.available ? 'status-online' : 'status-warning'}"></span>
+            ${docker.status || '—'}
+          </span>
         </div>
       </div>
     `;
   }
 
-  loadConfig(container) {
+  loadSecurity(container) {
+    const user = this.user || { username: '—', role: '—' };
+    const tokenValid = !!this.authToken && this.status != null;
     container.innerHTML = `
       <div class="config-section">
-        <h4>Adapter Configuration</h4>
+        <h4>Auth Health</h4>
         <div class="config-item">
-          <span class="config-label">LLM Adapter</span>
-          <div class="config-toggle ${this.systemData.adapters?.ollama?.available ? 'active' : ''}" 
-               onclick="admin.toggleAdapter('ollama')"></div>
+          <span class="config-label">Logged in as</span>
+          <span class="config-value">${user.username}</span>
         </div>
         <div class="config-item">
-          <span class="config-label">Docker Adapter</span>
-          <div class="config-toggle ${this.systemData.adapters?.docker?.available ? 'active' : ''}" 
-               onclick="admin.toggleAdapter('docker')"></div>
+          <span class="config-label">Role</span>
+          <span class="config-value">${user.role}</span>
         </div>
+        <div class="config-item">
+          <span class="config-label">Token valid</span>
+          <span class="config-value">
+            <span class="status-indicator ${tokenValid ? 'status-online' : 'status-offline'}"></span>
+            ${tokenValid ? 'Yes (API responded)' : 'No or not checked'}
+          </span>
+        </div>
+        <button class="btn danger" style="margin-top:12px" onclick="logout()">Logout</button>
       </div>
-      
+    `;
+  }
+
+  maskConfigValue(val) {
+    if (val == null || val === '') return '—';
+    const s = String(val);
+    if (s.length <= 8) return '***';
+    return s.substring(0, 3) + '***' + s.substring(s.length - 2);
+  }
+
+  loadConfig(container) {
+    const s = this.status;
+    if (!s || !s.adapters) { container.innerHTML = '<div class="loading">No status data. Click Refresh. Configuration is read-only (no backend changes).</div>'; return; }
+    const ollama = (s.adapters.ollama || {}).url;
+    const docker = (s.adapters.docker || {}).socket;
+    container.innerHTML = `
       <div class="config-section">
-        <h4>Security Settings</h4>
+        <h4>Configuration (read-only, masked)</h4>
         <div class="config-item">
-          <span class="config-label">Rate Limiting</span>
-          <div class="config-toggle active" onclick="admin.toggleSetting('rateLimit')"></div>
+          <span class="config-label">Ollama URL</span>
+          <span class="config-value">${this.maskConfigValue(ollama)}</span>
         </div>
         <div class="config-item">
-          <span class="config-label">Audit Logging</span>
-          <div class="config-toggle active" onclick="admin.toggleSetting('auditLog')"></div>
+          <span class="config-label">Docker socket</span>
+          <span class="config-value">${this.maskConfigValue(docker)}</span>
         </div>
+        <p style="margin-top:16px;color:var(--text-secondary);font-size:12px">No toggles or actions here; core is read-only. Use Refresh to reload.</p>
       </div>
-      
-      <div class="config-section">
-        <h4>System Actions</h4>
-        <button class="btn" onclick="admin.rotateSecrets()">Rotate Secrets</button>
-        <button class="btn danger" onclick="admin.restartSystem()">Restart System</button>
+    `;
+  }
+
+  loadErrors(container) {
+    if (this.errors.length === 0) {
+      container.innerHTML = '<div class="loading">No errors recorded.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <button class="btn" onclick="admin.errors=[]; admin.loadCurrentView(); admin.addLog('INFO','Errors cleared')">Clear errors</button>
+      <div style="margin-top:16px">
+        ${this.errors.slice().reverse().map(e => `
+          <div class="job-item" style="border-left:3px solid var(--error)">
+            <div class="job-header"><span class="metric-title">${e.title}</span><span class="config-value">${e.at}</span></div>
+            <div class="job-message">${e.message}</div>
+          </div>
+        `).join('')}
       </div>
     `;
   }
@@ -973,97 +1079,41 @@ class AdminControlPlane {
   updateSystemStatus() {
     const statusContent = document.getElementById('system-status-content');
     const statusIndicator = document.getElementById('system-status-indicator');
-    
-    if (!this.systemData.adapters) {
-      statusContent.innerHTML = '<div class="loading">Loading system status...</div>';
+    if (!this.status) {
+      statusContent.innerHTML = '<div class="loading">Loading…</div>';
+      statusIndicator.className = 'status-indicator status-warning';
       return;
     }
-    
+    const db = this.status.database || {};
+    const redis = this.status.redis || {};
     let statusClass = 'status-online';
-    let statusText = 'All Systems Operational';
-    
-    if (!this.systemData.adapters.database.available || !this.systemData.adapters.redis.available) {
+    let statusText = 'Operational';
+    if (!db.available || !redis.available) {
       statusClass = 'status-offline';
-      statusText = 'Critical Systems Offline';
-    } else if (!this.systemData.adapters.ollama.available || !this.systemData.adapters.docker.available) {
+      statusText = 'Critical offline';
+    } else if (!(this.status.adapters || {}).ollama?.available || !(this.status.adapters || {}).docker?.available) {
       statusClass = 'status-warning';
-      statusText = 'Some Adapters Offline';
+      statusText = 'Adapters partial';
     }
-    
     statusIndicator.className = `status-indicator ${statusClass}`;
-    
     statusContent.innerHTML = `
       <div class="config-item">
         <span class="config-label">Database</span>
-        <span class="config-value">
-          <span class="status-indicator ${this.systemData.adapters.database.available ? 'status-online' : 'status-offline'}"></span>
-          ${this.systemData.adapters.database.status || 'Unknown'}
-        </span>
+        <span class="config-value"><span class="status-indicator ${db.available ? 'status-online' : 'status-offline'}"></span> ${db.status || '—'}</span>
       </div>
       <div class="config-item">
         <span class="config-label">Redis</span>
-        <span class="config-value">
-          <span class="status-indicator ${this.systemData.adapters.redis.available ? 'status-online' : 'status-offline'}"></span>
-          ${this.systemData.adapters.redis.status || 'Unknown'}
-        </span>
+        <span class="config-value"><span class="status-indicator ${redis.available ? 'status-online' : 'status-offline'}"></span> ${redis.status || '—'}</span>
       </div>
       <div class="config-item">
-        <span class="config-label">LLM Adapter</span>
-        <span class="config-value">
-          <span class="status-indicator ${this.systemData.adapters.ollama.available ? 'status-online' : 'status-warning'}"></span>
-          ${this.systemData.adapters.ollama.status || 'Unavailable'}
-        </span>
+        <span class="config-label">Queue</span>
+        <span class="config-value">${redis.queue_length != null ? redis.queue_length : '—'}</span>
       </div>
       <div class="config-item">
-        <span class="config-label">Docker Adapter</span>
-        <span class="config-value">
-          <span class="status-indicator ${this.systemData.adapters.docker.available ? 'status-online' : 'status-warning'}"></span>
-          ${this.systemData.adapters.docker.status || 'Unavailable'}
-        </span>
-      </div>
-      <div class="config-item">
-        <span class="config-label">Overall Status</span>
+        <span class="config-label">Overall</span>
         <span class="config-value">${statusText}</span>
       </div>
     `;
-  }
-
-  async toggleAdapter(adapterName) {
-    this.addLog('INFO', `Toggling ${adapterName} adapter`);
-    await this.loadWorkspace();
-  }
-
-  async toggleSetting(settingName) {
-    this.addLog('INFO', `Toggling ${settingName} setting`);
-    await this.loadWorkspace();
-  }
-
-  async rotateSecrets() {
-    if (confirm('Are you sure you want to rotate all secrets? This will invalidate all existing sessions.')) {
-      this.addLog('WARN', 'Initiating secret rotation...');
-      await this.loadWorkspace();
-    }
-  }
-
-  async restartSystem() {
-    if (confirm('Are you sure you want to restart the system? This will interrupt all running jobs.')) {
-      this.addLog('WARN', 'Initiating system restart...');
-    }
-  }
-
-  selectJob(jobId) {
-    this.addLog('INFO', `Selected job: ${jobId}`);
-  }
-
-  editUser(userId) {
-    this.addLog('INFO', `Editing user: ${userId}`);
-  }
-
-  async deleteUser(userId) {
-    if (confirm('Are you sure you want to delete this user?')) {
-      this.addLog('WARN', `Deleting user: ${userId}`);
-      await this.loadWorkspace();
-    }
   }
 }
 
@@ -1075,7 +1125,7 @@ function showView(viewName) {
 }
 
 function refreshData() {
-  admin.loadWorkspace();
+  admin.refreshData();
   admin.addLog('INFO', 'Data refreshed by admin');
 }
 
