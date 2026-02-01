@@ -6,21 +6,23 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Ultra Agent OS – Agent Terminal</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --primary: #0f172a;
-  --secondary: #1e293b;
-  --accent: #3b82f6;
-  --accent-dark: #2563eb;
-  --success: #22c55e;
-  --warning: #f59e0b;
+  /* Modern vibrant palette */
+  --primary: #0a0e27;
+  --secondary: #141829;
+  --accent: #00d4ff;
+  --accent-dark: #00b8d4;
+  --accent-muted: rgba(0, 212, 255, 0.15);
+  --success: #10b981;
+  --warning: #f97316;
   --error: #ef4444;
-  --background: #030712;
-  --surface: #0f172a;
+  --background: #0a0e27;
+  --surface: #141829;
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
-  --border: rgba(148, 163, 184, 0.12);
+  --border: rgba(148, 163, 184, 0.2);
 }
 
 * {
@@ -30,7 +32,7 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--background);
   color: var(--text-primary);
   font-weight: 400;
@@ -70,7 +72,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--accent-muted);
   color: var(--accent);
   padding: 2px 8px;
   border-radius: 4px;
@@ -111,7 +113,7 @@ body {
 
 .btn:hover {
   background: var(--accent);
-  color: white;
+  color: #1a1210;
 }
 
 .btn.danger {
@@ -585,8 +587,8 @@ body {
 }
 
 .user-message {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
+  background: linear-gradient(135deg, #f5a623 0%, #e8940f 100%);
+  color: #1a1210;
   align-self: flex-end;
   margin-left: auto;
 }
@@ -620,7 +622,7 @@ body {
 .chat-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .chat-input::placeholder {
@@ -632,8 +634,8 @@ body {
   width: 100%;
   margin-top: 12px;
   padding: 12px 20px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
+  background: linear-gradient(135deg, #f5a623 0%, #e8940f 100%);
+  color: #1a1210;
   border: none;
   border-radius: 10px;
   font-family: inherit;
@@ -645,7 +647,7 @@ body {
 
 .send-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.4);
 }
 
 .send-button:disabled {
@@ -667,8 +669,8 @@ body {
 
 .job-item:hover {
   border-color: var(--accent);
-  background: rgba(37, 99, 235, 0.08);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  background: var(--accent-muted);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
 .job-item h4 {
@@ -725,11 +727,11 @@ body {
 .terminal-content {
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
-  color: #4ade80;
+  color: #90c978;
   padding: 16px;
   height: 100%;
   overflow-y: auto;
-  background: #0a0f1a;
+  background: #0f0a08;
   border-radius: 0 0 8px 8px;
 }
 
@@ -757,7 +759,7 @@ body {
 
 .terminal-toggle:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.4);
 }
 
 .step-item {

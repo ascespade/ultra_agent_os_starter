@@ -68,10 +68,12 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
   const db = require('../../../lib/db-connector').getPool();
   const redisKey = `tenant:${tenantId}:job:${jobId}`;
   try {
-    await db.query(`
+    // CRITICAL FIX: Verify update actually affected a row
+    const result = await db.query(`
       UPDATE jobs 
       SET status = $1, output_data = $2, error_message = $3, updated_at = NOW()
       WHERE id = $4 AND tenant_id = $5
+      RETURNING id
     `, [
       status,
       JSON.stringify(updates),
@@ -79,6 +81,11 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
       jobId,
       tenantId
     ]);
+    
+    if (result.rows.length === 0) {
+      console.warn(`[WORKER] WARNING: Job status update affected 0 rows for ${jobId} (status=${status})`);
+    }
+    
     const jobData = await redisClient.hGet(redisKey, 'data');
     if (jobData) {
       const job = JSON.parse(jobData);
@@ -89,6 +96,7 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
     }
   } catch (error) {
     console.error('[DATABASE] Failed to update job status:', error);
+    throw error; // Propagate error so caller knows about failure
   }
 }
 
@@ -345,10 +353,32 @@ async function processJob(jobData, tenantId) {
   
   console.log(`[WORKER] Processing job ${jobId} (tenant ${tid}): ${job.message}`);
   
+  let heartbeatInterval = null;
+  let jobTimedOut = false;
+  
+  // CRITICAL FIX: Heartbeat update every 5 seconds to detect stuck jobs
+  heartbeatInterval = setInterval(async () => {
+    try {
+      if (!jobTimedOut) {
+        await updateJobStatus(jobId, tid, 'processing', { 
+          heartbeat: new Date().toISOString(),
+          stage: 'processing'
+        });
+      }
+    } catch (err) {
+      console.error(`[WORKER] Heartbeat failed for ${jobId}:`, err.message);
+    }
+  }, 5000);
+  
   const jobTimeout = setTimeout(async () => {
-    console.log(`[WORKER] Job ${jobId} timed out, marking as failed`);
-    await updateJobStatus(jobId, tid, 'failed', { error: 'Job execution timeout' });
-    broadcastLog(jobId, { type: 'job_failed', error: 'Job execution timeout' });
+    jobTimedOut = true;
+    console.log(`[WORKER] Job ${jobId} timed out (60s), marking as failed`);
+    try {
+      await updateJobStatus(jobId, tid, 'failed', { error: 'Job execution timeout (60s)' });
+      broadcastLog(jobId, { type: 'job_failed', error: 'Job execution timeout' });
+    } catch (err) {
+      console.error(`[WORKER] Failed to mark job as failed on timeout:`, err.message);
+    }
   }, 60000);
   
   broadcastLog(jobId, { type: 'job_start', message: `Started processing: ${job.message}` });
@@ -411,18 +441,60 @@ async function processJob(jobData, tenantId) {
   } catch (error) {
     clearTimeout(jobTimeout);
     console.error(`[WORKER] Job ${jobId} failed:`, error);
-    await updateJobStatus(jobId, tid, 'failed', { error: error.message });
-    broadcastLog(jobId, { type: 'job_failed', error: error.message });
+    // Only mark as failed if not already timed out
+    if (!jobTimedOut) {
+      try {
+        await updateJobStatus(jobId, tid, 'failed', { error: error.message });
+        broadcastLog(jobId, { type: 'job_failed', error: error.message });
+      } catch (updateErr) {
+        console.error(`[WORKER] Failed to mark job as failed:`, updateErr.message);
+      }
+    }
+  } finally {
+    // CRITICAL FIX: Always clean up timers to prevent resource leak
+    clearTimeout(jobTimeout);
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+    }
   }
 }
 
 async function recoverStuckJobs() {
-  const stuckStates = ['processing'];
-  const timeoutMinutes = 5;
+  const stuckStates = ['processing', 'planning'];
+  const timeoutMinutes = 30; // Extended timeout for planning state recovery
   const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
   try {
-    const keys = await redisClient.keys('tenant:*:job:*');
+    // CRITICAL FIX: Also check database for jobs stuck in "planning" state
+    const db = require('../../../lib/db-connector').getPool();
+    
+    // Recovery from database stuck jobs
+    const stuckDbJobs = await db.query(`
+      SELECT id, tenant_id, status, created_at FROM jobs 
+      WHERE status IN ('planning', 'processing') 
+        AND created_at < NOW() - INTERVAL '${timeoutMinutes} minutes'
+      LIMIT 100
+    `);
+    
     let recoveredCount = 0;
+    for (const dbJob of stuckDbJobs.rows) {
+      console.log(`Recovering stuck job from DB: ${dbJob.id.substring(0, 8)} (status=${dbJob.status}, tenant=${dbJob.tenant_id})`);
+      try {
+        await updateJobStatus(dbJob.id, dbJob.tenant_id, 'failed', { 
+          error: `Job recovered after ${timeoutMinutes} minute timeout (was in ${dbJob.status} state)`,
+          recovered_at: new Date().toISOString()
+        });
+        broadcastLog(dbJob.id, { 
+          type: 'job_recovered', 
+          message: `Job recovered from ${dbJob.status} state after ${timeoutMinutes}m timeout` 
+        });
+        recoveredCount++;
+      } catch (err) {
+        console.error(`Failed to recover job ${dbJob.id}:`, err.message);
+      }
+    }
+    
+    // Also recovery from Redis cache
+    const keys = await redisClient.keys('tenant:*:job:*');
     for (const key of keys) {
       const jobData = await redisClient.hGet(key, 'data');
       if (jobData) {
@@ -431,13 +503,17 @@ async function recoverStuckJobs() {
         if (stuckStates.includes(job.status)) {
           const jobTime = new Date(job.created_at);
           if (jobTime < cutoffTime) {
-            console.log(`Recovering stuck job: ${job.id.substring(0, 8)} (tenant ${tenantId})`);
-            await updateJobStatus(job.id, tenantId, 'failed', { 
-              error: `Job recovered after ${timeoutMinutes} minute timeout`,
-              recovered_at: new Date().toISOString()
-            });
-            broadcastLog(job.id, { type: 'job_recovered', message: `Job recovered from ${job.status} state after timeout` });
-            recoveredCount++;
+            console.log(`Recovering stuck job from Redis: ${job.id.substring(0, 8)} (tenant ${tenantId})`);
+            try {
+              await updateJobStatus(job.id, tenantId, 'failed', { 
+                error: `Job recovered after ${timeoutMinutes} minute timeout`,
+                recovered_at: new Date().toISOString()
+              });
+              broadcastLog(job.id, { type: 'job_recovered', message: `Job recovered from ${job.status} state after timeout` });
+              recoveredCount++;
+            } catch (err) {
+              console.error(`Failed to recover job ${job.id}:`, err.message);
+            }
           }
         }
       }
@@ -504,7 +580,7 @@ async function workerLoop() {
   let idleCount = 0;
   const maxIdleCycles = 6;
   
-  while (true) {
+  while (workerRunning) {
     try {
       let tenants = await redisClient.sMembers('tenants');
       if (!tenants || tenants.length === 0) {
@@ -544,6 +620,8 @@ async function workerLoop() {
   }
 }
 
+let workerRunning = true;
+
 redisClient.connect().then(async () => {
   console.log('[CORE] Worker connected to Redis');
   await workerBootstrap();
@@ -554,6 +632,15 @@ redisClient.connect().then(async () => {
   console.error('[WORKER] Cannot start without Redis connection');
   process.exit(1);
 });
+
+const shutdown = () => {
+  workerRunning = false;
+  console.log('[WORKER] Shutdown signal received, closing Redis...');
+  redisClient.quit().catch(() => {}).finally(() => process.exit(0));
+  setTimeout(() => process.exit(1), 8000);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);

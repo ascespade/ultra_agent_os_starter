@@ -20,8 +20,57 @@ const { getEnvProfile } = require('../../../config/env-profiles');
 const { getAvailablePort } = require('../../../lib/port-allocator');
 
 const app = express();
-app.use(helmet());
+
+// CORS: allow UI origin (fix "Failed to fetch" on login)
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '*').split(',').map(s => s.trim());
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allow = ALLOWED_ORIGINS.includes('*') ? '*' : (origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+  res.setHeader('Access-Control-Allow-Origin', allow || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Tenant-Id');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(express.json());
+
+// Root landing page (fix localhost:3000/)
+const UI_URL = process.env.UI_URL || process.env.API_URL?.replace(':3000', ':8088') || 'http://localhost:8088';
+app.get('/', (req, res) => {
+  res.type('html');
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Ultra Agent OS – API</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'DM Sans',sans-serif;background:#1a1210;color:#e8d5c4;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+    h1{font-size:1.75rem;font-weight:700;color:#f5a623;margin-bottom:8px}
+    p{color:#c4a77d;margin-bottom:16px;font-size:1rem}
+    a{color:#f5a623;text-decoration:none;font-weight:500;padding:10px 20px;background:rgba(245,166,35,0.15);border-radius:8px;transition:background 0.2s}
+    a:hover{background:rgba(245,166,35,0.25)}
+    .links{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+    .badge{font-size:0.75rem;background:rgba(245,166,35,0.2);color:#f5a623;padding:4px 10px;border-radius:6px;margin-top:20px}
+  </style>
+</head>
+<body>
+  <h1>Ultra Agent OS</h1>
+  <p>API is running. Open the dashboard to get started.</p>
+  <div class="links">
+    <a href="${UI_URL}">Open Dashboard</a>
+    <a href="/health">Health Check</a>
+  </div>
+  <span class="badge">API v1.0</span>
+</body>
+</html>
+  `);
+});
 
 // Use validated environment variables
 const REDIS_URL = process.env.REDIS_URL;
@@ -137,33 +186,42 @@ function requireTenant(req, res, next) {
 // Initialize default user with automatic bootstrap
 async function initializeDefaultUser() {
   const db = require('../../../lib/db-connector').getPool();
-  
+  const envPassword = process.env.DEFAULT_ADMIN_PASSWORD;
+
   try {
-    // Check if admin user already exists
     const existingUser = await db.query('SELECT id FROM users WHERE username = $1 AND tenant_id = $2', ['admin', 'default']);
+
     if (existingUser.rows.length > 0) {
-      console.log('[SECURITY] Admin user already exists');
+      // Admin exists: sync password if DEFAULT_ADMIN_PASSWORD is set (allows password reset via env)
+      if (envPassword && envPassword.length >= 8) {
+        const hash = await bcrypt.hash(envPassword, 10);
+        await db.query('UPDATE users SET password_hash = $1 WHERE username = $2 AND tenant_id = $3', [hash, 'admin', 'default']);
+        console.log('[SECURITY] Admin password synced to DEFAULT_ADMIN_PASSWORD');
+      } else {
+        console.log('[SECURITY] Admin user already exists');
+      }
       return;
     }
-    
-    // Generate secure password automatically
-    const generatedPassword = require('crypto').randomBytes(16).toString('hex');
-    const defaultPasswordHash = await bcrypt.hash(generatedPassword, 10);
-    
+
+    // Create admin: use DEFAULT_ADMIN_PASSWORD when set, otherwise generate
+    const password = (envPassword && envPassword.length >= 8)
+      ? envPassword
+      : require('crypto').randomBytes(16).toString('hex');
+    const defaultPasswordHash = await bcrypt.hash(password, 10);
+
     await db.query(
       'INSERT INTO users (username, password_hash, tenant_id, role) VALUES ($1, $2, $3, $4)',
       ['admin', defaultPasswordHash, 'default', 'admin']
     );
-    
+
     console.log('[SECURITY] Admin user created in database');
-    console.log('[SECURITY] ==============================================');
-    console.log('[SECURITY] ⚠️  ADMIN BOOTSTRAP - SAVE THIS PASSWORD ⚠️');
-    console.log('[SECURITY] Username: admin');
-    console.log(`[SECURITY] Password: ${generatedPassword}`);
-    console.log('[SECURITY] ==============================================');
-    console.log('[SECURITY] This password will not be shown again!');
+    if (!envPassword || envPassword.length < 8) {
+      console.log('[SECURITY] Username: admin | Password:', password);
+      console.log('[SECURITY] Set DEFAULT_ADMIN_PASSWORD for predictable credentials.');
+    }
   } catch (error) {
     console.error('[SECURITY] Failed to create default user:', error);
+    throw error;
   }
 }
 
@@ -434,27 +492,40 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
 
 app.get('/api/memory/:filename', withTenant, async (req, res) => {
   const { filename } = req.params;
+  if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  if (!/^[a-zA-Z0-9_.-]+$/.test(filename)) {
+    return res.status(400).json({ error: 'Invalid filename format' });
+  }
   try {
     const db = require('../../../lib/db-connector').getPool();
+    const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId, 10) : req.user.userId;
+    
     const result = await db.query(
-      'SELECT content FROM memories WHERE user_id = $1 AND filename = $2 AND tenant_id = $3',
-      [req.user.userId, filename, req.tenantId]
+      `SELECT content FROM memories 
+       WHERE user_id = $1 AND filename = $2 AND tenant_id = $3`,
+      [userId, filename, req.tenantId]
     );
     
     if (result.rows.length === 0) {
-      return res.json({});
+      return res.json({ data: null });
     }
     
-    res.json(result.rows[0].content);
+    // content is already JSONB, return it directly
+    const content = result.rows[0].content;
+    res.json({ data: content });
   } catch (error) {
-    console.error('[DATABASE] Memory retrieval error:', error);
+    console.error('[MEMORY] Retrieval error:', error.message);
     res.status(500).json({ error: 'Failed to retrieve memory' });
   }
 });
 
-app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
+app.post('/api/memory/:filename', withTenant, async (req, res) => {
   const { filename } = req.params;
   const { data } = req.body;
+  
+  console.log(`[MEMORY] POST received - filename: ${filename}, data type: ${typeof data}`);
   
   // Filename validation
   if (!filename || typeof filename !== 'string') {
@@ -474,34 +545,63 @@ app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Data is required' });
   }
   
+  // Convert data to JSON object for JSONB storage
+  let dataToStore;
   try {
-    JSON.stringify(data);
+    if (typeof data === 'string') {
+      dataToStore = JSON.parse(data); // Parse string to object
+    } else if (typeof data === 'object') {
+      dataToStore = data;
+    } else {
+      dataToStore = { value: data };
+    }
+    console.log(`[MEMORY] Data converted - final type: ${typeof dataToStore}`);
   } catch (error) {
-    return res.status(400).json({ error: 'Data must be JSON serializable' });
+    console.log(`[MEMORY] JSON parse error: ${error.message}`);
+    return res.status(400).json({ error: 'Data must be valid JSON' });
   }
   
   try {
     const db = require('../../../lib/db-connector').getPool();
-    await db.query(`
+    const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId, 10) : req.user.userId;
+    
+    console.log(`[MEMORY] Storing - userId: ${userId} (type: ${typeof userId}), tenant: ${req.tenantId}, file: ${filename}`);
+    
+    const jsonString = JSON.stringify(dataToStore);
+    console.log(`[MEMORY] JSON string to store: ${jsonString.substring(0, 100)}...`);
+    
+    const result = await db.query(`
       INSERT INTO memories (user_id, filename, content, tenant_id, created_at, updated_at)
       VALUES ($1, $2, $3, $4, NOW(), NOW())
       ON CONFLICT (user_id, filename, tenant_id)
       DO UPDATE SET content = $3, updated_at = NOW()
-    `, [req.user.userId, filename, data, req.tenantId]);
+      RETURNING id
+    `, [userId, filename, jsonString, req.tenantId]);
     
-    res.json({ success: true });
+    console.log(`[MEMORY] Query executed, rows returned: ${result.rows.length}`);
+    
+    if (result.rows.length > 0) {
+      console.log(`[MEMORY] ✅ Success - stored as id: ${result.rows[0].id}`);
+      res.json({ success: true, id: result.rows[0].id });
+    } else {
+      throw new Error('No rows returned after insert');
+    }
   } catch (error) {
-    console.error('[DATABASE] Memory storage error:', error);
-    res.status(500).json({ error: 'Failed to store memory' });
+    console.error(`[MEMORY] ❌ Error: ${error.message}`);
+    console.error(`[MEMORY] Stack: ${error.stack}`);
+    res.status(500).json({ error: 'Failed to store memory', details: error.message });
   }
 });
 
 app.get('/api/workspace', withTenant, async (req, res) => {
   try {
     const db = require('../../../lib/db-connector').getPool();
+    const userId = typeof req.user.userId === 'string' ? parseInt(req.user.userId, 10) : req.user.userId;
+    
     const result = await db.query(
-      'SELECT filename, content FROM memories WHERE user_id = $1 AND tenant_id = $2',
-      [req.user.userId, req.tenantId]
+      `SELECT filename, content FROM memories 
+       WHERE user_id = $1 AND tenant_id = $2`,
+      [userId, req.tenantId]
     );
     
     const workspace = {
@@ -513,12 +613,13 @@ app.get('/api/workspace', withTenant, async (req, res) => {
     };
     
     result.rows.forEach(memory => {
+      // content is already JSONB
       workspace[memory.filename] = memory.content;
     });
     
     res.json(workspace);
   } catch (error) {
-    console.error('[DATABASE] Workspace retrieval error:', error);
+    console.error('[MEMORY] Workspace retrieval error:', error.message);
     res.status(500).json({ error: 'Failed to retrieve workspace' });
   }
 });
@@ -733,7 +834,18 @@ serverBootstrap().then(() => {
       res.status(500).json({ error: 'Failed to retrieve rate limit metrics' });
     }
   });
-  
+
+  // 404 for unknown routes
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Not found', path: req.path });
+  });
+
+  // Global error handler
+  app.use((err, req, res, next) => {
+    console.error('[API] Unhandled error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
   console.log('[RATE_LIMIT] Rate limiting system initialized');
   
   // Now start the server after rate limiting is configured
@@ -749,7 +861,7 @@ serverBootstrap().then(() => {
     
     // Listen on appropriate interface based on environment
     const HOST = process.env.HOST || (isRailway ? '0.0.0.0' : '127.0.0.1');
-    app.listen(PORT, HOST, () => {
+    const server = app.listen(PORT, HOST, () => {
       console.log(`[CORE] Ultra Agent API running on ${HOST}:${PORT} (env=${profile.env})`);
       console.log(`[CORE] WebSocket server running on port ${WS_PORT}`);
       console.log(`[SECURITY] Authentication system active`);
@@ -757,6 +869,16 @@ serverBootstrap().then(() => {
       console.log(`[REDIS] Redis integration active`);
       console.log(`[RATE_LIMIT] Professional rate limiting active`);
     });
+
+    const shutdown = () => {
+      console.log('[CORE] Shutdown signal received, closing server...');
+      server.close(() => {
+        redisClient.quit().catch(() => {}).finally(() => process.exit(0));
+      });
+      setTimeout(() => process.exit(1), 10000);
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   }).catch(error => {
     console.error('Failed to initialize default user:', error);
     process.exit(1);

@@ -33,6 +33,8 @@ services:
       dockerfile: ./apps/api/Dockerfile
     environment:
       - HOST=0.0.0.0
+      - UI_URL=http://localhost:8088
+      - CORS_ORIGINS=http://localhost:8088,http://localhost:4000,http://127.0.0.1:8088,http://127.0.0.1:4000
       - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data/agent
       - OLLAMA_URL=http://ollama:11434

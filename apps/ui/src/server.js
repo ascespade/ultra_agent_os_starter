@@ -29,13 +29,18 @@ app.get('/', (req, res) => {
   }
 });
 
+// Serve API test studio
+app.get('/test-api', (req, res) => {
+  res.sendFile(path.join(__dirname, 'test-api.html'));
+});
+
 // Inject API URL and WebSocket port for frontend (dynamic)
 app.get('/env.js', (req, res) => {
   res.type('application/javascript');
   const { getAllocatedPorts } = require('../../../lib/port-allocator');
   const ports = getAllocatedPorts();
   const wsPort = ports.websocket || 3011;
-  res.send(`window.API_URL = '${API_URL}'; window.WS_PORT = '${wsPort}';`);
+  res.send(`window.ENV = { API_URL: '${API_URL}', WS_PORT: '${wsPort}' };`);
 });
 
 app.use(express.static(__dirname));
