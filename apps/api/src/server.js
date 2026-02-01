@@ -127,7 +127,7 @@ async function initializeDefaultUser() {
     }
     
     // Check if admin user already exists
-    const existingUser = await db.query('SELECT id FROM users WHERE username = $1', ['admin']);
+    const existingUser = await db.query('SELECT id FROM users WHERE username = $1 AND tenant_id = $2', ['admin', 'default']);
     if (existingUser.rows.length > 0) {
       console.log('[SECURITY] Admin user already exists');
       return;
@@ -135,8 +135,8 @@ async function initializeDefaultUser() {
     
     const defaultPasswordHash = await bcrypt.hash(defaultPassword, 10);
     await db.query(
-      'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
-      ['admin', defaultPasswordHash]
+      'INSERT INTO users (username, password_hash, tenant_id, role) VALUES ($1, $2, $3, $4)',
+      ['admin', defaultPasswordHash, 'default', 'admin']
     );
     
     console.log('[SECURITY] Default admin user created in database');
@@ -173,7 +173,10 @@ app.post('/api/auth/login', async (req, res) => {
   
   try {
     const db = require('../lib/db-connector').getPool();
-    const result = await db.query('SELECT id, username, password_hash FROM users WHERE username = $1', [username]);
+    const result = await db.query(
+      'SELECT id, username, password_hash, tenant_id, role FROM users WHERE username = $1',
+      [username]
+    );
     
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -184,21 +187,29 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
+    const tenantId = user.tenant_id || 'default';
+    const role = user.role || 'user';
     const token = jwt.sign(
-      { userId: user.id, username: user.username, role: 'admin' },
+      { userId: user.id, username: user.username, role, tenantId },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
     
-    res.json({ token, user: { id: user.id, username: user.username, role: 'admin' } });
+    res.json({
+      token,
+      user: { id: user.id, username: user.username, role, tenantId }
+    });
   } catch (error) {
     console.error('[DATABASE] Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
+// Authenticated + tenant-required (cross_tenant_access forbidden)
+const withTenant = [authenticateToken, requireTenant];
+
 // Adapter Status Check Endpoint
-app.get('/api/adapters/status', authenticateToken, async (req, res) => {
+app.get('/api/adapters/status', withTenant, async (req, res) => {
   try {
     // Real adapter availability checks
     const ollamaAvailable = process.env.OLLAMA_URL && process.env.OLLAMA_URL.trim() !== '' && !process.env.OLLAMA_URL.includes('localhost');
@@ -228,12 +239,12 @@ app.get('/api/adapters/status', authenticateToken, async (req, res) => {
       redisError = error.message;
     }
     
-    // Real job queue status
+    // Real job queue status (tenant-scoped)
     let queueStatus = 'unknown';
     let queueLength = 0;
-    
+    const tenantQueueKey = `tenant:${req.tenantId}:job_queue`;
     try {
-      queueLength = await redisClient.lLen('job_queue');
+      queueLength = await redisClient.lLen(tenantQueueKey);
       queueStatus = queueLength > 0 ? 'active' : 'idle';
     } catch (error) {
       queueStatus = 'error';
@@ -305,30 +316,31 @@ function validateInput(req, res, next) {
   next();
 }
 
-app.post('/api/chat', authenticateToken, validateInput, async (req, res) => {
+app.post('/api/chat', withTenant, validateInput, async (req, res) => {
   const { message } = req.body;
   const jobId = uuidv4();
+  const tenantId = req.tenantId;
   
   try {
     const db = require('../lib/db-connector').getPool();
     
-    // Store job in database
     await db.query(`
-      INSERT INTO jobs (id, user_id, type, status, input_data, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-    `, [jobId, req.user.userId, 'chat', 'planning', JSON.stringify({ message })]);
+      INSERT INTO jobs (id, user_id, tenant_id, type, status, input_data, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+    `, [jobId, req.user.userId, tenantId, 'chat', 'planning', JSON.stringify({ message })]);
     
-    // Also queue in Redis for worker
     const job = {
       id: jobId,
+      tenantId,
       message,
       status: 'planning',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
     
-    await redisClient.lPush('job_queue', JSON.stringify(job));
-    await redisClient.hSet(`job:${jobId}`, 'data', JSON.stringify(job));
+    await redisClient.sAdd('tenants', tenantId);
+    await redisClient.lPush(`tenant:${tenantId}:job_queue`, JSON.stringify(job));
+    await redisClient.hSet(`tenant:${tenantId}:job:${jobId}`, 'data', JSON.stringify(job));
     
     res.json({ jobId, status: 'queued' });
   } catch (error) {
@@ -337,14 +349,18 @@ app.post('/api/chat', authenticateToken, validateInput, async (req, res) => {
   }
 });
 
-app.get('/api/jobs/:jobId', authenticateToken, async (req, res) => {
+app.get('/api/jobs/:jobId', withTenant, async (req, res) => {
   const { jobId } = req.params;
+  const tenantId = req.tenantId;
   
   try {
     const db = require('../lib/db-connector').getPool();
+    const isAdmin = req.user.role === 'admin';
     const result = await db.query(
-      'SELECT * FROM jobs WHERE id = $1 AND user_id = $2',
-      [jobId, req.user.userId]
+      isAdmin
+        ? 'SELECT * FROM jobs WHERE id = $1 AND tenant_id = $2'
+        : 'SELECT * FROM jobs WHERE id = $1 AND tenant_id = $2 AND user_id = $3',
+      isAdmin ? [jobId, tenantId] : [jobId, tenantId, req.user.userId]
     );
     
     if (result.rows.length === 0) {
@@ -394,14 +410,13 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/memory/:filename', authenticateToken, async (req, res) => {
+app.get('/api/memory/:filename', withTenant, async (req, res) => {
   const { filename } = req.params;
-  
   try {
     const db = require('../lib/db-connector').getPool();
     const result = await db.query(
-      'SELECT content FROM memories WHERE user_id = $1 AND filename = $2',
-      [req.user.userId, filename]
+      'SELECT content FROM memories WHERE user_id = $1 AND filename = $2 AND tenant_id = $3',
+      [req.user.userId, filename, req.tenantId]
     );
     
     if (result.rows.length === 0) {
@@ -447,10 +462,10 @@ app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
     const db = require('../lib/db-connector').getPool();
     await db.query(`
       INSERT INTO memories (user_id, filename, content, tenant_id, created_at, updated_at)
-      VALUES ($1, $2, $3, 'default', NOW(), NOW())
+      VALUES ($1, $2, $3, $4, NOW(), NOW())
       ON CONFLICT (user_id, filename, tenant_id)
       DO UPDATE SET content = $3, updated_at = NOW()
-    `, [req.user.userId, filename, data]);
+    `, [req.user.userId, filename, data, req.tenantId]);
     
     res.json({ success: true });
   } catch (error) {
@@ -459,14 +474,12 @@ app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/workspace', authenticateToken, async (req, res) => {
+app.get('/api/workspace', withTenant, async (req, res) => {
   try {
     const db = require('../lib/db-connector').getPool();
-    
-    // Get all memories for this user
     const result = await db.query(
-      'SELECT filename, content FROM memories WHERE user_id = $1',
-      [req.user.userId]
+      'SELECT filename, content FROM memories WHERE user_id = $1 AND tenant_id = $2',
+      [req.user.userId, req.tenantId]
     );
     
     const workspace = {
@@ -477,7 +490,6 @@ app.get('/api/workspace', authenticateToken, async (req, res) => {
       lastUpdated: new Date().toISOString()
     };
     
-    // Organize memories by filename
     result.rows.forEach(memory => {
       workspace[memory.filename] = memory.content;
     });
@@ -486,6 +498,23 @@ app.get('/api/workspace', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('[DATABASE] Workspace retrieval error:', error);
     res.status(500).json({ error: 'Failed to retrieve workspace' });
+  }
+});
+
+// Admin: list tenants (global_admin_view; admin only)
+app.get('/api/admin/tenants', withTenant, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin role required' });
+  }
+  try {
+    const db = require('../lib/db-connector').getPool();
+    const result = await db.query(
+      'SELECT tenant_id, name, status FROM tenants ORDER BY tenant_id'
+    );
+    res.json(result.rows.map(r => ({ tenant_id: r.tenant_id, name: r.name, status: r.status })));
+  } catch (error) {
+    console.error('[API] Admin tenants error:', error);
+    res.status(500).json({ error: 'Failed to list tenants' });
   }
 });
 
@@ -588,19 +617,16 @@ serverBootstrap().then(() => {
   console.log('[RATE_LIMIT] Initializing professional rate limiting system...');
   const rateLimitOrchestrator = new RateLimitOrchestrator(redisClient);
   
-  // Apply rate limiting policies to different endpoint categories
-  // CRITICAL: Health and admin endpoints MUST be exempt from rate limiting
-  app.use('/api/chat', rateLimitOrchestrator.getMiddleware('ai_endpoints', (req) => req.user?.userId || req.ip));
-  app.use('/api/jobs', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.user?.userId || req.ip));
-  app.use('/api/memory', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.user?.userId || req.ip));
-  app.use('/api/workspace', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.user?.userId || req.ip));
-  app.use('/api/adapters', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.user?.userId || req.ip));
-  // Health endpoint - NO RATE LIMITING (exempt as per requirements)
-  // Auth endpoints - light rate limiting for security
+  // Rate limiting with tenant-prefixed keys (ISOLATION_RULES.redis)
+  const tenantRateKey = (req) => `tenant:${(req.headers['x-tenant-id'] || 'none').trim()}:${req.user?.userId || req.ip}`;
+  app.use('/api/chat', rateLimitOrchestrator.getMiddleware('ai_endpoints', tenantRateKey));
+  app.use('/api/jobs', rateLimitOrchestrator.getMiddleware('light_endpoints', tenantRateKey));
+  app.use('/api/memory', rateLimitOrchestrator.getMiddleware('light_endpoints', tenantRateKey));
+  app.use('/api/workspace', rateLimitOrchestrator.getMiddleware('light_endpoints', tenantRateKey));
+  app.use('/api/adapters', rateLimitOrchestrator.getMiddleware('light_endpoints', tenantRateKey));
   app.use('/api/auth', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.ip));
   
-  // Add rate limiting metrics endpoint
-  app.get('/api/admin/rate-limit-metrics', authenticateToken, async (req, res) => {
+  app.get('/api/admin/rate-limit-metrics', withTenant, async (req, res) => {
     try {
       const metrics = await rateLimitOrchestrator.getMetrics();
       res.json(metrics);

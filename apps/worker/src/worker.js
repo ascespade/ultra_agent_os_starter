@@ -55,30 +55,28 @@ function writeMemoryFile(filename, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
-async function updateJobStatus(jobId, status, updates = {}) {
+async function updateJobStatus(jobId, tenantId, status, updates = {}) {
   const db = require('../lib/db-connector').getPool();
-  
+  const redisKey = `tenant:${tenantId}:job:${jobId}`;
   try {
-    // Update in database
     await db.query(`
       UPDATE jobs 
       SET status = $1, output_data = $2, error_message = $3, updated_at = NOW()
-      WHERE id = $4
+      WHERE id = $4 AND tenant_id = $5
     `, [
       status,
       JSON.stringify(updates),
       updates.error || null,
-      jobId
+      jobId,
+      tenantId
     ]);
-    
-    // Also update in Redis for real-time access
-    const jobData = await redisClient.hGet(`job:${jobId}`, 'data');
+    const jobData = await redisClient.hGet(redisKey, 'data');
     if (jobData) {
       const job = JSON.parse(jobData);
       job.status = status;
       job.updated_at = new Date().toISOString();
       Object.assign(job, updates);
-      await redisClient.hSet(`job:${jobId}`, 'data', JSON.stringify(job));
+      await redisClient.hSet(redisKey, 'data', JSON.stringify(job));
     }
   } catch (error) {
     console.error('[DATABASE] Failed to update job status:', error);
@@ -331,22 +329,23 @@ async function executeGeneric(jobId, step) {
   return { message: `Executed ${step.action}` };
 }
 
-async function processJob(jobData) {
+async function processJob(jobData, tenantId) {
   const job = JSON.parse(jobData);
   const jobId = job.id;
+  const tid = tenantId || job.tenantId || 'default';
   
-  console.log(`[WORKER] Processing job ${jobId}: ${job.message}`);
+  console.log(`[WORKER] Processing job ${jobId} (tenant ${tid}): ${job.message}`);
   
   const jobTimeout = setTimeout(async () => {
     console.log(`[WORKER] Job ${jobId} timed out, marking as failed`);
-    await updateJobStatus(jobId, 'failed', { error: 'Job execution timeout' });
+    await updateJobStatus(jobId, tid, 'failed', { error: 'Job execution timeout' });
     broadcastLog(jobId, { type: 'job_failed', error: 'Job execution timeout' });
-  }, 60000); // 60 second timeout
+  }, 60000);
   
   broadcastLog(jobId, { type: 'job_start', message: `Started processing: ${job.message}` });
   
   try {
-    await updateJobStatus(jobId, 'processing');
+    await updateJobStatus(jobId, tid, 'processing');
     const intent = await analyzeIntent(job.message);
     broadcastLog(jobId, { type: 'analysis_complete', intent: intent.intent });
     
@@ -382,7 +381,7 @@ async function processJob(jobData) {
     }
     
     clearTimeout(jobTimeout);
-    await updateJobStatus(jobId, 'completed', { 
+    await updateJobStatus(jobId, tid, 'completed', { 
       plan, 
       intent,
       execution_summary: {
@@ -403,51 +402,42 @@ async function processJob(jobData) {
   } catch (error) {
     clearTimeout(jobTimeout);
     console.error(`[WORKER] Job ${jobId} failed:`, error);
-    await updateJobStatus(jobId, 'failed', { error: error.message });
+    await updateJobStatus(jobId, tid, 'failed', { error: error.message });
     broadcastLog(jobId, { type: 'job_failed', error: error.message });
   }
 }
 
 async function recoverStuckJobs() {
-  console.log('Starting stuck job recovery...');
   const stuckStates = ['processing'];
   const timeoutMinutes = 5;
   const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
-  
   try {
-    const keys = await redisClient.keys('job:*');
+    const keys = await redisClient.keys('tenant:*:job:*');
     let recoveredCount = 0;
-    
     for (const key of keys) {
       const jobData = await redisClient.hGet(key, 'data');
       if (jobData) {
         const job = JSON.parse(jobData);
-        
+        const tenantId = key.startsWith('tenant:') ? key.split(':')[1] : 'default';
         if (stuckStates.includes(job.status)) {
           const jobTime = new Date(job.created_at);
           if (jobTime < cutoffTime) {
-            console.log(`Recovering stuck job: ${job.id.substring(0, 8)} (${job.status})`);
-            await updateJobStatus(job.id, 'failed', { 
+            console.log(`Recovering stuck job: ${job.id.substring(0, 8)} (tenant ${tenantId})`);
+            await updateJobStatus(job.id, tenantId, 'failed', { 
               error: `Job recovered after ${timeoutMinutes} minute timeout`,
               recovered_at: new Date().toISOString()
             });
-            broadcastLog(job.id, { 
-              type: 'job_recovered', 
-              message: `Job recovered from ${job.status} state after timeout`
-            });
+            broadcastLog(job.id, { type: 'job_recovered', message: `Job recovered from ${job.status} state after timeout` });
             recoveredCount++;
           }
         }
       }
     }
-    
-    console.log(`Recovery completed: ${recoveredCount} jobs recovered`);
+    if (recoveredCount > 0) console.log(`Recovery completed: ${recoveredCount} jobs recovered`);
   } catch (error) {
     console.error('Recovery failed:', error);
   }
-  
-  // Schedule next recovery
-  setTimeout(() => recoverStuckJobs(), 60000); // Check every minute
+  setTimeout(() => recoverStuckJobs(), 60000);
 }
 
 // Core Worker Bootstrap
@@ -496,26 +486,32 @@ async function workerBootstrap() {
   return { ollamaAvailable, dockerAvailable };
 }
   
-// Core Worker Loop
-// Continues processing jobs regardless of adapter availability
+// Core Worker Loop (tenant-scoped queues: BLPOP tenant:*:job_queue)
 async function workerLoop() {
-  console.log('[CORE] Worker loop started - waiting for jobs...');
-  
-  // Start recovery loop for stuck jobs
+  console.log('[CORE] Worker loop started - waiting for jobs (tenant-scoped queues)...');
   setTimeout(() => recoverStuckJobs(), 5000);
   
   let idleCount = 0;
-  const maxIdleCycles = 6; // 6 cycles = 60 seconds (10s per cycle)
+  const maxIdleCycles = 6;
   
   while (true) {
     try {
-      console.log('[WORKER] Checking for jobs...');
-      const jobData = await redisClient.brPop('job_queue', 10);
+      let tenants = await redisClient.sMembers('tenants');
+      if (!tenants || tenants.length === 0) {
+        await redisClient.sAdd('tenants', 'default');
+        tenants = ['default'];
+      }
+      const queueKeys = tenants.map(t => `tenant:${t}:job_queue`);
+      const timeout = 10;
+      const jobData = await redisClient.blPop(queueKeys, timeout);
       
       if (jobData) {
-        idleCount = 0; // Reset idle counter on job found
-        console.log(`[WORKER] Found job: ${jobData.element.substring(0, 100)}...`);
-        await processJob(jobData.element);
+        idleCount = 0;
+        const queueKey = Array.isArray(jobData) ? jobData[0] : jobData.key;
+        const payload = Array.isArray(jobData) ? jobData[1] : jobData.element;
+        const tenantId = (queueKey && String(queueKey).startsWith('tenant:')) ? String(queueKey).split(':')[1] : 'default';
+        console.log(`[WORKER] Found job (tenant ${tenantId}): ${(payload || '').substring(0, 80)}...`);
+        await processJob(payload, tenantId);
         console.log('[WORKER] Job processing completed');
       } else {
         idleCount++;
