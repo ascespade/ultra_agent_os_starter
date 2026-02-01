@@ -148,7 +148,7 @@ test.describe('ULTRA_AGENT_OS Core Functionality', () => {
       
       assert.strictEqual(statusResult.success, true, 'Job status should be accessible');
       assert(typeof statusResult.data.id === 'string', 'Job should have ID');
-      assert(['queued', 'processing', 'completed', 'failed'].includes(statusResult.data.status), 
+      assert(['queued', 'planning', 'processing', 'completed', 'failed'].includes(statusResult.data.status), 
              'Job should have valid status');
     } else {
       console.log('⚠️  Job test skipped - authentication failed');

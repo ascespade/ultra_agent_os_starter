@@ -194,7 +194,7 @@ test.describe('ULTRA_AGENT_OS Functional Tests', () => {
       
       assert.strictEqual(result.success, true, 'Job status should be accessible');
       assert(typeof result.data.id === 'string', 'Job should have ID');
-      assert(['queued', 'processing', 'completed', 'failed'].includes(result.data.status), 
+      assert(['queued', 'planning', 'processing', 'completed', 'failed'].includes(result.data.status), 
              'Job should have valid status');
       assert.strictEqual(result.data.input_data.message, 'Test functional suite job execution', 
                        'Job should preserve input message');
