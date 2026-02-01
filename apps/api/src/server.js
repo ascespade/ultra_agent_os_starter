@@ -21,8 +21,15 @@ app.use(express.json());
 // JWT Secret with runtime guard
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// Railway environment variables fallback
+if (!JWT_SECRET && process.env.RAILWAY_ENVIRONMENT) {
+  // Generate a JWT secret for Railway if not provided
+  console.log('[SECURITY] Generating JWT_SECRET for Railway deployment');
+  process.env.JWT_SECRET = require('crypto').randomBytes(64).toString('hex');
+}
+
 // Runtime security check
-if (!JWT_SECRET) {
+if (!process.env.JWT_SECRET) {
   console.error('[SECURITY] JWT_SECRET environment variable is required');
   console.error('[SECURITY] Set JWT_SECRET to a secure random string');
   process.exit(1);

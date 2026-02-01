@@ -4,8 +4,14 @@ const path = require('path');
 const { getAvailablePort } = require('../../../lib/port-allocator');
 
 const app = express();
-let PORT = process.env.UI_PORT || 3002;
+let PORT = process.env.UI_PORT || process.env.PORT || 3002;
 let API_URL = process.env.API_URL;
+
+// Railway environment variables fallback
+if (!API_URL && process.env.RAILWAY_ENVIRONMENT) {
+  // In Railway, use the Railway service URL
+  API_URL = process.env.RAILWAY_PUBLIC_URL || `https://${process.env.RAILWAY_SERVICE_NAME}.railway.app`;
+}
 
 if (!API_URL) {
   console.error('[CRITICAL] API_URL environment variable is required');

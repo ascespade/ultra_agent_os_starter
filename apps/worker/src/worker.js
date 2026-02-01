@@ -12,8 +12,14 @@ const REDIS_URL = process.env.REDIS_URL;
 const DATA_DIR = process.env.DATA_DIR || '/data/agent';
 const OLLAMA_URL = process.env.OLLAMA_URL;
 
+// Railway environment variables fallback
+if (!REDIS_URL && process.env.RAILWAY_ENVIRONMENT) {
+  console.log('[REDIS] Using Railway Redis URL');
+  process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379/0';
+}
+
 // Redis connection with runtime guard
-if (!REDIS_URL) {
+if (!process.env.REDIS_URL) {
   console.error('[REDIS] REDIS_URL environment variable is required');
   console.error('[REDIS] Set REDIS_URL to Redis connection string');
   process.exit(1);
