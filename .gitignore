@@ -50,6 +50,10 @@ coverage/
 dist/
 build/
 
+# Local port allocation (runtime)
+.allocated-ports.json
+.port-cache.json
+
 # Temporary files
 *.tmp
 *.temp

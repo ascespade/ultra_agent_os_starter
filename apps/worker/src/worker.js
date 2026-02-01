@@ -65,7 +65,7 @@ function writeMemoryFile(filename, data) {
 }
 
 async function updateJobStatus(jobId, tenantId, status, updates = {}) {
-  const db = require('../lib/db-connector').getPool();
+  const db = require('../../../lib/db-connector').getPool();
   const redisKey = `tenant:${tenantId}:job:${jobId}`;
   try {
     await db.query(`

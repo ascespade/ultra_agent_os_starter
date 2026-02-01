@@ -194,7 +194,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
   
   try {
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     const result = await db.query(
       'SELECT id, username, password_hash, tenant_id, role FROM users WHERE username = $1',
       [username]
@@ -238,7 +238,7 @@ app.get('/api/adapters/status', withTenant, async (req, res) => {
     const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '' && !process.env.DOCKER_HOST.includes('localhost');
     
     // Real system status checks
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     let databaseStatus = 'unknown';
     let databaseError = null;
     
@@ -344,7 +344,7 @@ app.post('/api/chat', withTenant, validateInput, async (req, res) => {
   const tenantId = req.tenantId;
   
   try {
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     
     await db.query(`
       INSERT INTO jobs (id, user_id, tenant_id, type, status, input_data, created_at, updated_at)
@@ -376,7 +376,7 @@ app.get('/api/jobs/:jobId', withTenant, async (req, res) => {
   const tenantId = req.tenantId;
   
   try {
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     const isAdmin = req.user.role === 'admin';
     const result = await db.query(
       isAdmin
@@ -408,7 +408,7 @@ app.get('/api/jobs/:jobId', withTenant, async (req, res) => {
 
 app.get('/api/jobs', authenticateToken, async (req, res) => {
   try {
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     const result = await db.query(
       'SELECT * FROM jobs WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.userId]
@@ -435,7 +435,7 @@ app.get('/api/jobs', authenticateToken, async (req, res) => {
 app.get('/api/memory/:filename', withTenant, async (req, res) => {
   const { filename } = req.params;
   try {
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     const result = await db.query(
       'SELECT content FROM memories WHERE user_id = $1 AND filename = $2 AND tenant_id = $3',
       [req.user.userId, filename, req.tenantId]
@@ -481,7 +481,7 @@ app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
   }
   
   try {
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     await db.query(`
       INSERT INTO memories (user_id, filename, content, tenant_id, created_at, updated_at)
       VALUES ($1, $2, $3, $4, NOW(), NOW())
@@ -498,7 +498,7 @@ app.post('/api/memory/:filename', authenticateToken, async (req, res) => {
 
 app.get('/api/workspace', withTenant, async (req, res) => {
   try {
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     const result = await db.query(
       'SELECT filename, content FROM memories WHERE user_id = $1 AND tenant_id = $2',
       [req.user.userId, req.tenantId]
@@ -529,7 +529,7 @@ app.get('/api/admin/tenants', withTenant, async (req, res) => {
     return res.status(403).json({ error: 'Admin role required' });
   }
   try {
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     const result = await db.query(
       'SELECT tenant_id, name, status FROM tenants ORDER BY tenant_id'
     );
@@ -544,7 +544,7 @@ app.get('/api/admin/tenants', withTenant, async (req, res) => {
 app.get("/health", async (req, res) => {
   try {
     // Real health checks
-    const db = require('../lib/db-connector').getPool();
+    const db = require('../../../lib/db-connector').getPool();
     let databaseHealthy = false;
     let databaseError = null;
     
