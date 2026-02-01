@@ -614,8 +614,10 @@ serverBootstrap().then(() => {
   
   // Now start the server after rate limiting is configured
   initializeDefaultUser().then(() => {
-    app.listen(PORT, () => {
-      console.log(`[CORE] Ultra Agent API running on ${PORT}`);
+    // Listen on localhost only to prevent network issues when Tailscale is off
+    const HOST = process.env.HOST || '127.0.0.1';
+    app.listen(PORT, HOST, () => {
+      console.log(`[CORE] Ultra Agent API running on ${HOST}:${PORT}`);
       console.log(`[CORE] WebSocket server running on ${process.env.WS_PORT || 3010}`);
       console.log(`[SECURITY] Authentication system active`);
       console.log(`[DATABASE] PostgreSQL integration active`);
