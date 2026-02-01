@@ -106,6 +106,16 @@ function authenticateToken(req, res, next) {
   });
 }
 
+// Tenant context: JWT claim or X-TENANT-ID for admin (fail if missing)
+function requireTenant(req, res, next) {
+  const tenantId = req.user.tenantId || (req.user.role === 'admin' ? (req.headers['x-tenant-id'] || '').trim() : null) || null;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Tenant context required' });
+  }
+  req.tenantId = tenantId;
+  next();
+}
+
 // Initialize default user with security guard
 async function initializeDefaultUser() {
   const db = require('../lib/db-connector').getPool();
@@ -625,7 +635,82 @@ serverBootstrap().then(() => {
   app.use('/api/memory', rateLimitOrchestrator.getMiddleware('light_endpoints', tenantRateKey));
   app.use('/api/workspace', rateLimitOrchestrator.getMiddleware('light_endpoints', tenantRateKey));
   app.use('/api/adapters', rateLimitOrchestrator.getMiddleware('light_endpoints', tenantRateKey));
+  app.use('/api/plugins', rateLimitOrchestrator.getMiddleware('light_endpoints', tenantRateKey));
   app.use('/api/auth', rateLimitOrchestrator.getMiddleware('light_endpoints', (req) => req.ip));
+  
+  // Plugin Manager API (tenant-scoped, fail-isolated)
+  app.get('/api/plugins', withTenant, async (req, res) => {
+    try {
+      const discovered = pluginSystem.discoverPlugins();
+      const enabled = await pluginSystem.getEnabledPlugins(redisClient, req.tenantId);
+      const list = (discovered.available || []).map((p) => {
+        const validation = pluginSystem.validatePlugin(p, pluginSystem.getPluginDir(), { signedOnly: true });
+        const status = pluginSystem.monitorPlugin(req.tenantId, p.id);
+        return {
+          id: p.id,
+          name: p.name,
+          version: p.version,
+          type: p.type,
+          description: p.description,
+          permissions: p.permissions,
+          enabled: enabled.includes(p.id),
+          valid: validation.valid,
+          validationErrors: validation.valid ? [] : validation.errors,
+          status: status.status
+        };
+      });
+      res.json({ plugins: list, errors: discovered.errors || [] });
+    } catch (e) {
+      console.error('[PLUGINS] List error:', e);
+      res.status(500).json({ error: 'Failed to list plugins' });
+    }
+  });
+  app.post('/api/plugins/:pluginId/enable', withTenant, async (req, res) => {
+    const { pluginId } = req.params;
+    const tenantId = req.tenantId;
+    try {
+      const discovered = pluginSystem.discoverPlugins();
+      const meta = (discovered.available || []).find((p) => p.id === pluginId);
+      if (!meta) {
+        return res.status(404).json({ error: 'Plugin not found' });
+      }
+      const validation = pluginSystem.validatePlugin(meta, pluginSystem.getPluginDir(), { signedOnly: true });
+      if (!validation.valid) {
+        return res.status(400).json({ error: 'Plugin validation failed', details: validation.errors });
+      }
+      const result = await pluginSystem.enablePlugin(redisClient, tenantId, pluginId, meta);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || 'Enable failed' });
+      }
+      res.json({ success: true });
+    } catch (e) {
+      console.error('[PLUGINS] Enable error:', e);
+      res.status(500).json({ error: 'Failed to enable plugin' });
+    }
+  });
+  app.post('/api/plugins/:pluginId/disable', withTenant, async (req, res) => {
+    const { pluginId } = req.params;
+    try {
+      const result = await pluginSystem.disablePlugin(redisClient, req.tenantId, pluginId);
+      res.json({ success: result.success, shutdownOk: result.shutdownOk });
+    } catch (e) {
+      console.error('[PLUGINS] Disable error:', e);
+      res.status(500).json({ error: 'Failed to disable plugin' });
+    }
+  });
+  app.get('/api/plugins/status', withTenant, async (req, res) => {
+    try {
+      const enabled = await pluginSystem.getEnabledPlugins(redisClient, req.tenantId);
+      const statuses = enabled.map((id) => ({
+        id,
+        ...pluginSystem.monitorPlugin(req.tenantId, id)
+      }));
+      res.json({ plugins: statuses });
+    } catch (e) {
+      console.error('[PLUGINS] Status error:', e);
+      res.status(500).json({ error: 'Failed to get plugin status' });
+    }
+  });
   
   app.get('/api/admin/rate-limit-metrics', withTenant, async (req, res) => {
     try {

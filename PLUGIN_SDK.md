@@ -4,16 +4,67 @@
 
 This document defines the **Plugin SDK** for Ultra Agent OS, enabling hot-pluggable extensions with isolation, governance, and failure containment.
 
+**Orchestrator**: MARKETPLACE_PLUGIN_ORCHESTRATOR v1.0.0 — strict plugin ecosystem (discover → validate → sandbox → enable → monitor → disable).
+
+---
+
+## PLUGIN LIFECYCLE (Mandatory Order)
+
+1. **discover** — Scan plugin directory / registry; list available plugins (manifest only).
+2. **validate** — Check manifest (required fields, permissions), signature, and compatibility.
+3. **sandbox** — Run plugin code in isolated context (timeout + try/catch; no core mutation).
+4. **enable** — Load plugin, call `onInitialize`, register per tenant (tenant-scoped).
+5. **monitor** — Report status/health of each enabled plugin per tenant.
+6. **disable** — Call `onShutdown`, remove from registry (hot-disable safely).
+
+Plugin failure at any step does not affect core; plugins hot-disable without crashing the platform.
+
+---
+
+## PLUGIN RULES
+
+| Rule | Enforcement |
+|------|--------------|
+| **no_core_mutation** | Plugins cannot modify core code paths; they run in a sandboxed execution layer. |
+| **sandbox_execution** | Plugin lifecycle methods run with timeout and try/catch; errors return a result object, not throw. |
+| **fail_isolated** | Plugin crash or timeout is contained; core API and worker continue. |
+| **tenant_scoped** | Enable/disable and state are per tenant (Redis keys `tenant:{tenantId}:plugins:enabled`). |
+
+---
+
+## SECURITY
+
+- **signed_plugins_only**: Manifest must include a `signature` field. Verification: SHA256 of canonical `plugin.json`; `signature` must equal the hash or `sha256:{hash}`.
+- **explicit_permissions**: Plugins declare `permissions` in the manifest; only known permissions are accepted; unknown permissions cause validation failure.
+
+---
+
+## API (Plugin Manager)
+
+All plugin endpoints require authentication and tenant context (JWT or `X-TENANT-ID` for admin).
+
+- **GET /api/plugins** — List discovered plugins with validation result and enabled status for the current tenant.
+- **POST /api/plugins/:pluginId/enable** — Validate (including signature) and enable the plugin for the current tenant.
+- **POST /api/plugins/:pluginId/disable** — Hot-disable: call `onShutdown`, remove from tenant registry.
+- **GET /api/plugins/status** — Return status of all enabled plugins for the current tenant.
+
+---
+
+## DASHBOARD INTEGRATION
+
+The Admin Control Plane includes a **Plugin Manager** view: list plugins, enable/disable per tenant, view validation and status. Data is loaded from `GET /api/plugins` and `GET /api/plugins/status`; actions use the POST enable/disable endpoints.
+
 ---
 
 ## 🔌 PLUGIN ARCHITECTURE OVERVIEW
 
 ### Plugin System Design
 - **Hot-Pluggable**: Plugins can be loaded/unloaded at runtime
-- **Isolated Execution**: Each plugin runs in isolated context
-- **Permission-Based**: Plugins declare required permissions
-- **Fail-Safe**: Plugin failures cannot crash core platform
+- **Isolated Execution**: Each plugin runs in isolated context (sandbox_execution)
+- **Permission-Based**: Plugins declare required permissions (explicit_permissions)
+- **Fail-Safe**: Plugin failures cannot crash core platform (fail_isolated)
 - **Versioned**: Plugin compatibility matrix enforcement
+- **Tenant-Scoped**: Enable/disable and state are per tenant
 
 ### Plugin Types
 ```javascript

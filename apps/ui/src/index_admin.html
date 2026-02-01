@@ -570,6 +570,10 @@ body {
         <span class="nav-icon">⚠️</span>
         <span>Errors &amp; Alerts</span>
       </div>
+      <div class="nav-item" data-view="plugins" onclick="showView('plugins')">
+        <span class="nav-icon">🧩</span>
+        <span>Plugin Manager</span>
+      </div>
     </div>
   </div>
 
@@ -891,7 +895,7 @@ class AdminControlPlane {
 
   loadCurrentView() {
     const content = document.getElementById('view-content');
-    const titles = { overview: 'System Overview', jobs: 'Jobs & Workers', dbredis: 'Database & Redis', integrations: 'Integrations Status', security: 'Security & Auth Health', config: 'Configuration (read-only)', errors: 'Error & Alerts View' };
+    const titles = { overview: 'System Overview', jobs: 'Jobs & Workers', dbredis: 'Database & Redis', integrations: 'Integrations Status', security: 'Security & Auth Health', config: 'Configuration (read-only)', errors: 'Error & Alerts View', plugins: 'Plugin Manager' };
     document.getElementById('view-title').textContent = titles[this.currentView] || this.currentView;
     switch (this.currentView) {
       case 'overview': this.loadOverview(content); break;
@@ -901,7 +905,91 @@ class AdminControlPlane {
       case 'security': this.loadSecurity(content); break;
       case 'config': this.loadConfig(content); break;
       case 'errors': this.loadErrors(content); break;
+      case 'plugins': this.loadPlugins(content); break;
       default: this.loadOverview(content);
+    }
+  }
+
+  async loadPlugins(container) {
+    container.innerHTML = '<div class="loading"><div class="spinner"></div> Loading plugins…</div>';
+    try {
+      const response = await fetch(`${window.API_URL}/api/plugins`, { headers: this.getApiHeaders() });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to load plugins');
+      }
+      const data = await response.json();
+      const plugins = data.plugins || [];
+      const errors = data.errors || [];
+      if (plugins.length === 0 && errors.length === 0) {
+        container.innerHTML = '<div class="loading">No plugins discovered. Add plugins to the plugin directory and refresh.</div>';
+        return;
+      }
+      let html = '';
+      if (errors.length) {
+        html += '<div class="metric-card" style="margin-bottom:16px"><div class="metric-title" style="color:var(--warning)">Discovery errors</div><ul style="font-size:12px;color:var(--text-secondary);margin:8px 0 0 0;padding-left:20px">' + errors.map(e => `<li>${(e.plugin || '')}: ${(e.error || '')}</li>`).join('') + '</ul></div>';
+      }
+      html += '<div class="metric-card"><div class="metric-title">Plugins (tenant-scoped)</div><p style="font-size:12px;color:var(--text-secondary);margin:8px 0 12px 0">Enable/disable applies to current tenant. Signed plugins only.</p>';
+      plugins.forEach(p => {
+        const statusClass = p.enabled ? 'status-online' : 'status-offline';
+        const validBadge = p.valid ? '<span style="color:var(--success);font-size:11px">valid</span>' : '<span style="color:var(--error);font-size:11px">invalid</span>';
+        const btn = p.enabled
+          ? `<button class="btn danger" onclick="admin.pluginDisable('${p.id}')">Disable</button>`
+          : `<button class="btn success" onclick="admin.pluginEnable('${p.id}')" ${!p.valid ? 'disabled title="Fix validation errors first"' : ''}>Enable</button>`;
+        const validationErr = (p.validationErrors && p.validationErrors.length) ? '<div style="font-size:11px;color:var(--error);margin-top:4px">' + p.validationErrors.join('; ') + '</div>' : '';
+        html += `
+          <div class="job-item" style="margin-bottom:12px">
+            <div class="job-header">
+              <span class="job-id">${p.name} v${p.version}</span>
+              <span class="status-indicator ${statusClass}"></span>
+              ${validBadge}
+            </div>
+            <div class="job-message">${(p.description || p.type || '').substring(0, 120)}</div>
+            <div class="config-item"><span class="config-label">Type</span><span class="config-value">${p.type || '—'}</span></div>
+            <div class="config-item"><span class="config-label">Permissions</span><span class="config-value">${(p.permissions || []).join(', ') || '—'}</span></div>
+            ${validationErr}
+            <div style="margin-top:12px">${btn}</div>
+          </div>`;
+      });
+      html += '</div>';
+      container.innerHTML = html;
+    } catch (e) {
+      this.addError('Plugins', e.message);
+      container.innerHTML = '<div class="loading" style="color:var(--error)">' + (e.message || 'Failed to load plugins') + '</div>';
+    }
+  }
+
+  async pluginEnable(pluginId) {
+    try {
+      const response = await fetch(`${window.API_URL}/api/plugins/${encodeURIComponent(pluginId)}/enable`, {
+        method: 'POST',
+        headers: this.getApiHeaders()
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Enable failed');
+      this.addLog('INFO', 'Plugin enabled: ' + pluginId);
+      this.loadPlugins(document.getElementById('view-content'));
+    } catch (e) {
+      this.addError('Plugin enable', e.message);
+      this.addLog('ERROR', 'Plugin enable: ' + e.message);
+      alert('Enable failed: ' + e.message);
+    }
+  }
+
+  async pluginDisable(pluginId) {
+    try {
+      const response = await fetch(`${window.API_URL}/api/plugins/${encodeURIComponent(pluginId)}/disable`, {
+        method: 'POST',
+        headers: this.getApiHeaders()
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Disable failed');
+      this.addLog('INFO', 'Plugin disabled: ' + pluginId);
+      this.loadPlugins(document.getElementById('view-content'));
+    } catch (e) {
+      this.addError('Plugin disable', e.message);
+      this.addLog('ERROR', 'Plugin disable: ' + e.message);
+      alert('Disable failed: ' + e.message);
     }
   }
 
