@@ -254,50 +254,67 @@ async function executeAnalysis(jobId, step) {
 
 // Adapter: Docker Execution Environment
 // Type: PLUGGABLE_ADAPTER
-// Status: Intentionally disabled for platform core stability
+// Status: Real execution when Docker available; explicit unavailable when not
 async function executeCommand(jobId, step) {
   if (!step.command) {
     return { output: 'No command specified' };
   }
-  
-  // Adapter Check: Docker execution capability
+
   const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '';
-  
+
   if (!dockerAvailable) {
-    broadcastLog(jobId, { 
-      type: 'adapter_unavailable', 
-      message: 'Docker execution adapter not available - command queued for manual execution' 
+    broadcastLog(jobId, {
+      type: 'adapter_unavailable',
+      message: 'Docker execution adapter not available - command queued for manual execution'
     });
-    
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    return { 
-      output: `Command queued for manual execution: ${step.command}`, 
+    return {
+      output: `Command queued for manual execution: ${step.command}`,
       exitCode: 0,
       adapter_status: 'unavailable'
     };
   }
-  
-  // Docker execution path (guarded)
+
   try {
-    broadcastLog(jobId, { 
-      type: 'adapter_active', 
-      message: 'Docker execution adapter processing command' 
+    broadcastLog(jobId, {
+      type: 'adapter_active',
+      message: 'Docker execution adapter processing command'
     });
-    
-    // Actual Docker execution would go here
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const simulatedOutput = `Docker execution result for: ${step.command}`;
-    return { output: simulatedOutput, exitCode: 0, adapter_status: 'active' };
+
+    const { Writable } = require('stream');
+    let output = '';
+    const capture = new Writable({
+      write(chunk, enc, cb) {
+        output += chunk.toString();
+        cb();
+      }
+    });
+
+    const runPromise = docker.run(
+      'alpine:3.18',
+      ['sh', '-c', step.command],
+      [capture, capture],
+      { Tty: false }
+    );
+    const timeoutMs = 30000;
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Docker execution timeout (30s)')), timeoutMs)
+    );
+    const [data, container] = await Promise.race([runPromise, timeoutPromise]);
+    if (container) await container.remove().catch(() => {});
+
+    const exitCode = (data && data.StatusCode !== undefined) ? data.StatusCode : 0;
+    return {
+      output: output || '(no output)',
+      exitCode,
+      adapter_status: 'active'
+    };
   } catch (error) {
-    broadcastLog(jobId, { 
-      type: 'adapter_error', 
-      message: `Docker adapter error: ${error.message}` 
+    broadcastLog(jobId, {
+      type: 'adapter_error',
+      message: `Docker adapter error: ${error.message}`
     });
-    
-    return { 
-      output: `Docker execution failed: ${error.message}`, 
+    return {
+      output: `Docker execution failed: ${error.message}`,
       exitCode: 1,
       adapter_status: 'error'
     };

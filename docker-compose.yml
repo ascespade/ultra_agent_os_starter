@@ -32,6 +32,7 @@ services:
       context: .
       dockerfile: ./apps/api/Dockerfile
     environment:
+      - HOST=0.0.0.0
       - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data/agent
       - OLLAMA_URL=http://ollama:11434

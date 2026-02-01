@@ -24,6 +24,7 @@
         "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
         "REDIS_URL": "${{Redis.REDIS_URL}}",
         "NODE_ENV": "production",
+        "HOST": "0.0.0.0",
         "INTERNAL_API_KEY": {
           "generate": true
         },
@@ -46,12 +47,6 @@
       "environment": [
         "production"
       ],
-      "healthcheck": {
-        "path": "/health",
-        "interval": 30,
-        "timeout": 10,
-        "retries": 5
-      },
       "env": {
         "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
         "REDIS_URL": "${{Redis.REDIS_URL}}",

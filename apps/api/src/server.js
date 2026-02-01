@@ -618,7 +618,7 @@ serverBootstrap().then(() => {
     const HOST = process.env.HOST || '127.0.0.1';
     app.listen(PORT, HOST, () => {
       console.log(`[CORE] Ultra Agent API running on ${HOST}:${PORT}`);
-      console.log(`[CORE] WebSocket server running on ${process.env.WS_PORT || 3010}`);
+      console.log(`[CORE] WebSocket server running on port ${WS_PORT}`);
       console.log(`[SECURITY] Authentication system active`);
       console.log(`[DATABASE] PostgreSQL integration active`);
       console.log(`[REDIS] Redis integration active`);

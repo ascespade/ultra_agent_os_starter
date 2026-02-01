@@ -7,5 +7,6 @@ RUN npm install --only=production
 
 COPY apps/worker/src/ ./src/
 COPY lib/ ./lib/
+COPY config/ ./config/
 
 CMD ["npm", "start"]

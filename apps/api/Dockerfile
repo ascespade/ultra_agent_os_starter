@@ -7,6 +7,7 @@ RUN npm install --only=production
 
 COPY apps/api/src/ ./src/
 COPY lib/ ./lib/
+COPY config/ ./config/
 
 EXPOSE 3000
 

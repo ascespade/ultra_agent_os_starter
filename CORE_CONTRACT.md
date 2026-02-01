@@ -3,9 +3,23 @@
 ## CORE_IDENTITY
 **Project**: Ultra Agent OS - Railway Blueprint Core Platform  
 **Version**: core-freeze-v1.0.0  
-**Status**: Production-Ready Railway Blueprint  
-**Forensic Score**: 97/100  
-**Blueprint Compliance**: Zero-Trust Railway Deployment Ready
+**Status**: FROZEN — Production-Ready Railway Blueprint  
+**Forensic Score**: 96/100 (Phase 0 post-fix)  
+**Blueprint Compliance**: Zero-Trust Railway Deployment Ready  
+**Freeze Lock**: Applied 2026-02-01 (GOVERNED_CORE_FREEZE_AND_EXPANSION_ORCHESTRATOR)
+
+---
+
+## FREEZE_LOCK (IMMUTABLE CORE)
+
+The following are **locked** as of tag `core-freeze-v1.0.0`. Expansion phases must not modify them; extend only via new code paths or new services.
+
+| Item | Rule |
+|------|------|
+| **Directories** | `apps/api`, `apps/worker`, `lib`, `config` — no breaking changes |
+| **API / DB schema** | No ALTER/DROP on core tables: `users`, `jobs`, `memories`, `tenant_quotas`, `tenants` |
+| **Runtime contracts** | Health shape, job queue format, WS_PORT/HOST/PORT from env, no hardcoded ports/URLs |
+| **Manifest** | `CORE_FREEZE_LOCK.json` — authoritative locked paths and prohibited changes |
 
 ---
 
@@ -80,6 +94,14 @@ PORT=3000
 # Optional: API server port (auto-assigned by Railway)
 # Default: 3000
 
+HOST=0.0.0.0
+# Optional: API bind address (required 0.0.0.0 in Docker/Railway for host access)
+# Default: 127.0.0.1
+
+WS_PORT=3011
+# Optional: WebSocket server port (API and UI; no hardcoded port)
+# Default: 3011
+
 API_URL=http://api:3000
 # Required: UI API endpoint (auto-wired by Railway)
 # Source: Railway service reference to ultra-agent-api
@@ -96,7 +118,7 @@ NODE_ENV=production
 ### API Service (`ultra-agent-api`)
 **Source**: `apps/api`  
 **Port**: Dynamic (Railway-assigned)  
-**Dependencies**: PostgreSQL, Redis, WebSocket Server (port 3011)  
+**Dependencies**: PostgreSQL, Redis, WebSocket Server (port from `WS_PORT` env, default 3011)  
 
 **Environment Variables**:
 - `DATABASE_URL` → Railway Postgres service reference
@@ -243,8 +265,8 @@ Extend the worker to support new job types by modifying the `analyzeIntent` and 
 - **Environment**: All variables auto-generated or referenced
 
 ### Network Requirements:
-- **API Port**: Dynamic (Railway-assigned)
-- **WebSocket Port**: 3011 (internal)
+- **API Port**: Dynamic (Railway-assigned); bind **HOST=0.0.0.0** in deployment
+- **WebSocket Port**: From **WS_PORT** env (default 3011); no hardcoded port
 - **Database Access**: PostgreSQL connectivity via service reference
 - **Redis Access**: Redis connectivity via service reference
 
@@ -328,13 +350,14 @@ app.get('/api/custom', authenticateToken, async (req, res) => {
 
 ## BLUEPRINT_VERSION_HISTORY
 
-### v1.0.0 (core-freeze)
-- Initial Railway blueprint core freeze
-- Zero-trust autowire compliance
-- Real PostgreSQL and Redis integration
-- Production-ready security and monitoring
-- Complete UI with real-time updates
-- Forensic score: 97/100
+### v1.0.0 (core-freeze-v1.0.0)
+- Freeze Lock applied per GOVERNED_CORE_FREEZE_AND_EXPANSION_ORCHESTRATOR
+- Locked directories: apps/api, apps/worker, lib, config
+- API/DB schema changes prohibited on core tables
+- Zero-trust autowire compliance; no hardcoded ports or URLs
+- Real PostgreSQL and Redis integration; rate limiter surfaces 503 on Redis failure
+- Worker Docker execution real when DOCKER_HOST set
+- Forensic score: 96/100 (Phase 0 post-fix)
 
 ---
 

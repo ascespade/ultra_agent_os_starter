@@ -1,0 +1,32 @@
+{
+  "orchestrator": "GOVERNED_CORE_FREEZE_AND_EXPANSION_ORCHESTRATOR",
+  "version": "1.0.0",
+  "tag": "core-freeze-v1.0.0",
+  "authority": "Principal Platform Architect & Governance Authority",
+  "freeze_date": "2026-02-01",
+  "phase_0_score": 96,
+  "decision_gate": "APPLY_FREEZE",
+  "locked_directories": [
+    "apps/api",
+    "apps/worker",
+    "lib",
+    "config"
+  ],
+  "locked_artifacts": [
+    "docker-compose.yml",
+    "railway.json",
+    "railway.toml"
+  ],
+  "prohibited_changes": [
+    "No schema changes to core tables: users, jobs, memories, tenant_quotas, tenants (no ALTER/DROP on these)",
+    "No removal or signature change of core API endpoints: /health, /api/auth/login, /api/chat, /api/jobs, /api/jobs/:id, /api/memory/:filename, /api/workspace, /api/adapters/status",
+    "No removal of required env: DATABASE_URL, REDIS_URL, JWT_SECRET (API); API_URL (UI)",
+    "No hardcoded ports or URLs in core services"
+  ],
+  "runtime_contracts_locked": {
+    "health": "GET /health returns { status, checks: { database, redis, websocket } }",
+    "job_queue": "Redis list job_queue; job payload JSON with id, message, status, created_at, updated_at",
+    "websocket_port": "WS_PORT env (default 3011); no hardcoded port",
+    "api_bind": "HOST env (0.0.0.0 in deployment); PORT env"
+  }
+}

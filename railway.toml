@@ -27,6 +27,9 @@ variableRef = "REDIS_PRIVATE_URL"
 name = "NODE_ENV"
 value = "production"
 [[services.env]]
+name = "HOST"
+value = "0.0.0.0"
+[[services.env]]
 name = "INTERNAL_API_KEY"
 generate = true
 [[services.env]]

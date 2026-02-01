@@ -21,10 +21,11 @@ app.get('/', (req, res) => {
   }
 });
 
-// Inject API URL as environment variable for frontend
+// Inject API URL and WebSocket port for frontend (no hardcoded ports)
+const WS_PORT = process.env.WS_PORT || '3011';
 app.get('/env.js', (req, res) => {
   res.type('application/javascript');
-  res.send(`window.API_URL = '${API_URL}';`);
+  res.send(`window.API_URL = '${API_URL}'; window.WS_PORT = '${WS_PORT}';`);
 });
 
 app.use(express.static(__dirname));

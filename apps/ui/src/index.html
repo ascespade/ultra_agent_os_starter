@@ -885,8 +885,9 @@ class UltraAgentUI {
       return;
     }
     
-    // Convert API URL to WebSocket URL
-    const wsUrl = window.API_URL.replace(/^http/, 'ws').replace(/:\d+/, '') + ':3011';
+    // Convert API URL to WebSocket URL (port from env injection)
+    const wsPort = window.WS_PORT || 3011;
+    const wsUrl = window.API_URL.replace(/^http/, 'ws').replace(/:\d+/, '') + ':' + wsPort;
     
     try {
       this.ws = new WebSocket(wsUrl);

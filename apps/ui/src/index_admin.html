@@ -716,7 +716,8 @@ class AdminControlPlane {
   }
 
   connectWebSocket() {
-    const wsUrl = window.API_URL.replace('http', 'ws') + ':3011';
+    const wsPort = window.WS_PORT || 3011;
+    const wsUrl = (window.API_URL.replace(/^http/, 'ws').replace(/:\d+/, '') || 'ws://localhost') + ':' + wsPort;
     this.websocket = new WebSocket(wsUrl);
     
     this.websocket.onopen = () => {
