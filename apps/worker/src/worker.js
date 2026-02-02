@@ -642,6 +642,23 @@ async function workerBootstrap() {
   
 // Core Worker Loop (tenant-scoped queues: BLPOP tenant:*:job_queue)
 async function workerLoop() {
+  // Start Health Check Server
+  const http = require('http');
+  const healthPort = process.env.PORT || 3004;
+  const healthServer = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', worker: 'active' }));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  
+  healthServer.listen(healthPort, '0.0.0.0', () => {
+    console.log(`[WORKER] Health check server listening on port ${healthPort}`);
+  });
+
   console.log('[CORE] Worker loop started - waiting for jobs (tenant-scoped queues)...');
   setTimeout(() => recoverStuckJobs(), 5000);
   
