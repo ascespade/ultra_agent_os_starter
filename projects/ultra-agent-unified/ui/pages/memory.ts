@@ -1,1 +1,1 @@
-﻿export default function MemoryPage() { return `<div><h1>Memory Management</h1><div id="memory-browser"></div><div id="memory-search"></div><div id="memory-stats"></div><script src="/widgets/dashboard.js"></script><script src="/widgets/charts.js"></script></div>`; }
+export default function MemoryPage() { return `<div><h1>Memory Management</h1><div id="memory-browser"></div><div id="memory-search"></div><div id="memory-stats"></div><script src="/widgets/dashboard.js"></script><script src="/widgets/charts.js"></script></div>`; }

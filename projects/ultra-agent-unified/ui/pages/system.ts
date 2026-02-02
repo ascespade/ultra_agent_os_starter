@@ -1,1 +1,1 @@
-﻿export default function SystemPage() { return `<div><h1>System Administration</h1><div id="system-status"></div><div id="user-management"></div><div id="system-settings"></div><script src="/widgets/dashboard.js"></script><script src="/widgets/notifications.js"></script></div>`; }
+export default function SystemPage() { return `<div><h1>System Administration</h1><div id="system-status"></div><div id="user-management"></div><div id="system-settings"></div><script src="/widgets/dashboard.js"></script><script src="/widgets/notifications.js"></script></div>`; }
