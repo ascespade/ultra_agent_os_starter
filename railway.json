@@ -11,9 +11,6 @@
       "name": "ultra-agent-api",
       "source": ".",
       "dockerfilePath": "apps/api/Dockerfile",
-      "environment": [
-        "production"
-      ],
       "healthcheck": {
         "path": "/health",
         "interval": 30,
@@ -40,9 +37,6 @@
       "name": "ultra-agent-worker",
       "source": ".",
       "dockerfilePath": "apps/worker/Dockerfile",
-      "environment": [
-        "production"
-      ],
       "env": {
         "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
         "REDIS_URL": "${{Redis.REDIS_URL}}",
