@@ -33,7 +33,8 @@
         "interval": 30,
         "timeout": 10,
         "retries": 5
-      }
+      },
+      "port": 3003
     }
   ],
   "databases": {
