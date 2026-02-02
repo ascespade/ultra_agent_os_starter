@@ -69,9 +69,6 @@ retries = 5
 name = "NODE_ENV"
 value = "production"
 [[services.env]]
-name = "PORT"
-value = "3003"
-[[services.env]]
 name = "API_URL"
 serviceRef = "ultra-agent-api"
 variableRef = "RAILWAY_PUBLIC_URL"
