@@ -1,0 +1,280 @@
+const { Pool } = require('pg');
+const pino = require('pino');
+
+const logger = pino({
+  name: 'simple-memory-service',
+  level: process.env.LOG_LEVEL || 'info'
+});
+
+class SimpleMemoryService {
+  constructor() {
+    this.pool = null;
+  }
+
+  async initialize() {
+    try {
+      this.pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      });
+
+      logger.info('Simple memory service initialized successfully');
+    } catch (error) {
+      logger.error({ error: error.message }, 'Failed to initialize simple memory service');
+      throw error;
+    }
+  }
+
+  async createMemory(tenantId, userId, filename, content, options = {}) {
+    const client = await this.pool.connect();
+    try {
+      const { metadata = {}, tags = [], expiresAt = null } = options;
+      const id = require('uuid').v4().toString();
+      const sizeBytes = JSON.stringify(content).length;
+
+      // Proper upsert using ON CONFLICT with explicit constraint name
+      const result = await client.query(
+        `INSERT INTO memories (id, tenant_id, user_id, filename, content, metadata, tags, size_bytes, created_at, updated_at, expires_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), $9) 
+         ON CONFLICT ON CONSTRAINT unique_active_memory 
+         DO UPDATE SET 
+           content = EXCLUDED.content,
+           metadata = EXCLUDED.metadata,
+           tags = EXCLUDED.tags,
+           size_bytes = EXCLUDED.size_bytes,
+           updated_at = NOW(),
+           expires_at = EXCLUDED.expires_at
+         RETURNING id, created_at, updated_at`,
+        [id, tenantId, userId, filename, JSON.stringify(content), JSON.stringify(metadata), tags, sizeBytes, expiresAt]
+      );
+
+      logger.info({ tenantId, userId, filename, id }, 'Memory created/updated successfully');
+
+      return {
+        success: true,
+        memory: {
+          id: result.rows[0].id,
+          filename,
+          size_bytes: sizeBytes,
+          created_at: result.rows[0].created_at,
+          updated_at: result.rows[0].updated_at
+        }
+      };
+    } catch (error) {
+      logger.error({ error: error.message, tenantId, userId, filename }, 'Failed to create/update memory');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async readMemory(tenantId, userId, filename) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT * FROM memories WHERE tenant_id = $1 AND user_id = $2 AND filename = $3 AND is_deleted = FALSE',
+        [tenantId, userId, filename]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const memory = result.rows[0];
+      return {
+        data: memory.content,
+        metadata: memory.metadata,
+        tags: memory.tags,
+        created_at: memory.created_at,
+        updated_at: memory.updated_at
+      };
+    } catch (error) {
+      logger.error({ error: error.message, filename, tenantId }, 'Memory read failed');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteMemory(tenantId, userId, filename) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'UPDATE memories SET is_deleted = TRUE, updated_at = NOW() WHERE tenant_id = $1 AND user_id = $2 AND filename = $3 AND is_deleted = FALSE RETURNING id',
+        [tenantId, userId, filename]
+      );
+
+      if (result.rows.length === 0) {
+        return { success: false, message: "Memory not found" };
+      }
+
+      logger.info({ tenantId, userId, filename }, 'Memory deleted successfully');
+
+      return { success: true, id: result.rows[0].id };
+    } catch (error) {
+      logger.error({ error: error.message, filename, tenantId }, 'Memory delete failed');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async searchMemories(tenantId, userId, options) {
+    const client = await this.pool.connect();
+    try {
+      const { query, tags, metadata, limit, page } = options;
+      const offset = (page - 1) * limit;
+
+      let whereClause = 'WHERE tenant_id = $1 AND user_id = $2 AND is_deleted = FALSE';
+      let queryParams = [tenantId, userId];
+      let paramIndex = 3;
+
+      if (query) {
+        whereClause += ` AND search_vector @@ to_tsquery('english', $${paramIndex})`;
+        queryParams.push(query);
+        paramIndex++;
+      }
+
+      if (tags && tags.length > 0) {
+        whereClause += ` AND tags && $${paramIndex}`;
+        queryParams.push(tags);
+        paramIndex++;
+      }
+
+      const searchQuery = `
+        SELECT id, filename, metadata, tags, created_at, updated_at, size_bytes
+        FROM memories 
+        ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM memories 
+        ${whereClause}
+      `;
+
+      const [memoriesResult, countResult] = await Promise.all([
+        client.query(searchQuery, queryParams.concat([limit, offset])),
+        client.query(countQuery, queryParams)
+      ]);
+
+      const total = parseInt(countResult.rows[0].total);
+      const memories = memoriesResult.rows;
+
+      return {
+        memories,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      };
+    } catch (error) {
+      logger.error({ error: error.message, tenantId }, 'Memory search failed');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getWorkspace(tenantId, userId) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT filename, size_bytes, created_at, updated_at, tags FROM memories WHERE tenant_id = $1 AND user_id = $2 AND is_deleted = FALSE ORDER BY updated_at DESC',
+        [tenantId, userId]
+      );
+
+      return {
+        memories: result.rows,
+        total: result.rows.length,
+        tenant_id: tenantId,
+        user_id: userId
+      };
+    } catch (error) {
+      logger.error({ error: error.message, tenantId }, 'Workspace retrieval failed');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getMemoryStats(tenantId, userId) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT 
+          COUNT(*) as total_memories,
+          COALESCE(SUM(size_bytes), 0) as total_size_bytes,
+          MAX(created_at) as latest_memory,
+          MIN(created_at) as oldest_memory
+        FROM memories 
+        WHERE tenant_id = $1 AND user_id = $2 AND is_deleted = FALSE`,
+        [tenantId, userId]
+      );
+
+      return {
+        total_memories: parseInt(result.rows[0].total_memories),
+        total_size_bytes: parseInt(result.rows[0].total_size_bytes),
+        latest_memory: result.rows[0].latest_memory,
+        oldest_memory: result.rows[0].oldest_memory
+      };
+    } catch (error) {
+      logger.error({ error: error.message, tenantId }, 'Memory stats retrieval failed');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async applyRetentionPolicy(policy, dryRun = true) {
+    // Simple implementation - mark old memories as deleted
+    const client = await this.pool.connect();
+    try {
+      let query;
+      let queryParams;
+      let description;
+
+      switch (policy.type) {
+        case 'age':
+          query = `UPDATE memories SET is_deleted = TRUE, updated_at = NOW() 
+                   WHERE created_at < NOW() - INTERVAL '${policy.days} days' AND is_deleted = FALSE`;
+          queryParams = [];
+          description = `Delete memories older than ${policy.days} days`;
+          break;
+        default:
+          throw new Error(`Unknown retention policy type: ${policy.type}`);
+      }
+
+      if (dryRun) {
+        const countQuery = query.replace('UPDATE memories SET is_deleted = TRUE', 'SELECT COUNT(*) as count');
+        const result = await client.query(countQuery, queryParams);
+        
+        return {
+          dry_run: true,
+          affected_memories: parseInt(result.rows[0].count),
+          description,
+          policy
+        };
+      } else {
+        const result = await client.query(query, queryParams);
+        return {
+          dry_run: false,
+          affected_memories: result.rowCount,
+          description,
+          policy
+        };
+      }
+    } catch (error) {
+      logger.error({ error: error.message }, 'Retention policy application failed');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+}
+
+module.exports = new SimpleMemoryService();

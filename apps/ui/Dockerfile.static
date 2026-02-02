@@ -1,0 +1,15 @@
+FROM nginx:alpine
+
+# Copy static files directly (simple and stable approach)
+COPY apps/ui/src /usr/share/nginx/html
+
+# Copy nginx configuration
+COPY apps/ui/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3003/health || exit 1
+
+EXPOSE 3003
+
+CMD ["nginx", "-g", "daemon off;"]

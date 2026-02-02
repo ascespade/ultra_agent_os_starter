@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<script src="/env.js"></script>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Ultra Agent OS – Settings</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/notifications.css">
+<style>
+:root {
+  /* Night Sky Palette - كحلي مع نجوم */
+  --primary: #0a1428;
+  --secondary: #1a2847;
+  --accent: #4a9eff;
+  --accent-dark: #3a7ee6;
+  --accent-muted: rgba(74, 158, 255, 0.15);
+  --success: #10b981;
+  --warning: #f97316;
+  --error: #ef4444;
+  --background: #0a1428;
+  --surface: #1a2847;
+  --text-primary: #e8f1ff;
+  --text-secondary: #7fa3c8;
+  --border: rgba(79, 122, 184, 0.2);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Starfield Animation */
+@keyframes twinkle {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 0.3;
+  }
+  20%, 24%, 55% {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-3d {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, -2px, 10px) scale(1.1);
+    opacity: 0.3;
+  }
+}
+
+.star {
+  position: fixed;
+  background: radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.3) 100%);
+  border-radius: 50%;
+  animation: twinkle 3s infinite, pulse-3d 4s infinite ease-in-out;
+  box-shadow: 0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(74, 158, 255, 0.3);
+  pointer-events: none;
+  z-index: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: linear-gradient(135deg, #0a1428 0%, #0f1f3c 30%, #1a2847 60%, #0a1428 100%);
+  color: var(--text-primary);
+  font-weight: 400;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(74, 158, 255, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(74, 158, 255, 0.03) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+#settings-container {
+  display: flex;
+  height: 100vh;
+  position: relative;
+  z-index: 2;
+}
+
+.settings-sidebar {
+  width: 280px;
+  background: linear-gradient(135deg, rgba(10, 20, 40, 0.95) 0%, rgba(26, 40, 71, 0.9) 100%);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  box-shadow: inset 0 0 20px rgba(74, 158, 255, 0.05);
+}
+
+.settings-header {
+  padding: 24px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  background: linear-gradient(135deg, var(--accent) 0%, #7ab8ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.settings-header p {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+}
+
+.settings-menu-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-menu-item:hover {
+  background: rgba(74, 158, 255, 0.1);
+  color: var(--accent);
+}
+
+.settings-menu-item.active {
+  background: rgba(74, 158, 255, 0.15);
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+.settings-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+
+.settings-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(26, 40, 71, 0.5) 0%, rgba(26, 40, 71, 0.3) 100%);
+}
+
+.settings-top h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  background: rgba(74, 158, 255, 0.1);
+  color: var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn:hover {
+  background: var(--accent);
+  color: #1a1428;
+  border-color: var(--accent);
+}
+
+.btn.danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+.btn.danger:hover {
+  background: var(--error);
+  color: white;
+}
+
+.btn.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.btn.success:hover {
+  background: var(--success);
+  color: white;
+}
+
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 30px;
+}
+
+.settings-section {
+  margin-bottom: 40px;
+}
+
+.settings-section h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 12px;
+}
+
+.setting-item {
+  background: linear-gradient(135deg, rgba(26, 40, 71, 0.7) 0%, rgba(26, 40, 71, 0.5) 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 0 10px rgba(74, 158, 255, 0.05);
+  transition: all 0.3s ease;
+}
+
+.setting-item:hover {
+  background: linear-gradient(135deg, rgba(26, 40, 71, 0.8) 0%, rgba(26, 40, 71, 0.6) 100%);
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(74, 158, 255, 0.2), inset 0 0 10px rgba(74, 158, 255, 0.1);
+}
+
+.setting-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.setting-label-text {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.setting-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.setting-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(10, 20, 40, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.setting-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(74, 158, 255, 0.3);
+  background: rgba(10, 20, 40, 0.8);
+}
+
+.setting-select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(10, 20, 40, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.setting-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(74, 158, 255, 0.3);
+}
+
+.setting-toggle {
+  position: relative;
+  width: 50px;
+  height: 26px;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.setting-toggle.active {
+  background: rgba(16, 185, 129, 0.3);
+  border-color: var(--success);
+}
+
+.setting-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.setting-toggle.active::after {
+  transform: translateX(24px);
+  background: var(--success);
+}
+
+.color-picker-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 12px;
+}
+
+.color-option {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.color-option:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(74, 158, 255, 0.4);
+}
+
+.color-option.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(74, 158, 255, 0.6);
+}
+
+.test-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--success);
+}
+
+.test-status.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--error);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: pulse 2s infinite;
+}
+
+.test-status.error .status-dot {
+  background: var(--error);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.settings-footer {
+  padding: 20px 30px;
+  border-top: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(26, 40, 71, 0.5) 0%, rgba(26, 40, 71, 0.3) 100%);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(74, 158, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(74, 158, 255, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 158, 255, 0.5);
+}
+
+@media (max-width: 1024px) {
+  .settings-sidebar {
+    width: 220px;
+  }
+  .settings-body {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  #settings-container {
+    flex-direction: column;
+  }
+  .settings-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-menu {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+}
+</link>
+</head>
+<body>
+
+<div id="settings-container">
+  <div class="settings-sidebar">
+    <div class="settings-header">
+      <h1>⚙️ Settings</h1>
+      <p>Configuration & Preferences</p>
+    </div>
+    <div class="settings-menu">
+      <div class="settings-menu-item active" onclick="showSection('llm')">
+        <span class="settings-icon">🤖</span>
+        <span>LLM Configuration</span>
+      </div>
+      <div class="settings-menu-item" onclick="showSection('appearance')">
+        <span class="settings-icon">🎨</span>
+        <span>Appearance</span>
+      </div>
+      <div class="settings-menu-item" onclick="showSection('system')">
+        <span class="settings-icon">⚡</span>
+        <span>System</span>
+      </div>
+      <div class="settings-menu-item" onclick="showSection('about')">
+        <span class="settings-icon">ℹ️</span>
+        <span>About</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-content">
+    <div class="settings-top">
+      <h2 id="section-title">LLM Configuration</h2>
+      <div class="settings-actions">
+        <button class="btn" onclick="testSettings()">🧪 Test Settings</button>
+        <button class="btn success" onclick="saveSettings()">✅ Save</button>
+      </div>
+    </div>
+
+    <div class="settings-body">
+      <!-- LLM Configuration Section -->
+      <div id="llm-section" class="settings-section">
+        <h3>🤖 LLM Provider</h3>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Select Provider</span>
+          </div>
+          <div class="setting-hint">Choose your Language Model provider</div>
+          <select id="llm-provider" class="setting-select" onchange="updateLLMFields()">
+            <option value="ollama">Ollama (Local)</option>
+            <option value="openai">OpenAI (GPT-4)</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="claude">Anthropic Claude</option>
+          </select>
+        </div>
+
+        <!-- Ollama Section -->
+        <div id="ollama-fields">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="setting-label-text">Ollama URL</span>
+            </div>
+            <div class="setting-hint">Local Ollama instance endpoint</div>
+            <input type="text" id="ollama-url" class="setting-input" placeholder="http://ollama:11434" value="http://ollama:11434">
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="setting-label-text">Model</span>
+            </div>
+            <div class="setting-hint">Local model to use (e.g., llama3.2, mistral)</div>
+            <input type="text" id="ollama-model" class="setting-input" placeholder="llama3.2" value="llama3.2">
+          </div>
+        </div>
+
+        <!-- OpenAI Section -->
+        <div id="openai-fields" class="hidden">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="setting-label-text">API Key</span>
+            </div>
+            <div class="setting-hint">Your OpenAI API key (sk-...)</div>
+            <input type="password" id="openai-api-key" class="setting-input" placeholder="sk-...">
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="setting-label-text">Model</span>
+            </div>
+            <div class="setting-hint">GPT model to use</div>
+            <select id="openai-model" class="setting-select">
+              <option value="gpt-4-turbo">GPT-4 Turbo</option>
+              <option value="gpt-4">GPT-4</option>
+              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Gemini Section -->
+        <div id="gemini-fields" class="hidden">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="setting-label-text">API Key</span>
+            </div>
+            <div class="setting-hint">Your Google Gemini API key</div>
+            <input type="password" id="gemini-api-key" class="setting-input" placeholder="AIza...">
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="setting-label-text">Model</span>
+            </div>
+            <div class="setting-hint">Gemini model to use</div>
+            <select id="gemini-model" class="setting-select">
+              <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+              <option value="gemini-1.5">Gemini 1.5</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Claude Section -->
+        <div id="claude-fields" class="hidden">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="setting-label-text">API Key</span>
+            </div>
+            <div class="setting-hint">Your Anthropic Claude API key</div>
+            <input type="password" id="claude-api-key" class="setting-input" placeholder="sk-ant-...">
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="setting-label-text">Model</span>
+            </div>
+            <div class="setting-hint">Claude model to use</div>
+            <select id="claude-model" class="setting-select">
+              <option value="claude-3-opus">Claude 3 Opus</option>
+              <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+              <option value="claude-3-haiku">Claude 3 Haiku</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-item" id="test-result" class="hidden">
+          <div id="test-result-content" class="test-status">
+            <span class="status-dot"></span>
+            <span id="test-result-text">Testing...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Appearance Section -->
+      <div id="appearance-section" class="settings-section hidden">
+        <h3>🎨 Appearance & Theme</h3>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Theme Color</span>
+          </div>
+          <div class="setting-hint">Select your preferred color theme</div>
+          <div class="color-picker-group">
+            <div class="color-option selected" data-theme="blue" style="background: linear-gradient(135deg, #4a9eff 0%, #3a7ee6 100%);" onclick="setTheme('blue')" title="Night Sky Blue"></div>
+            <div class="color-option" data-theme="purple" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);" onclick="setTheme('purple')" title="Purple"></div>
+            <div class="color-option" data-theme="pink" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);" onclick="setTheme('pink')" title="Pink"></div>
+            <div class="color-option" data-theme="green" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);" onclick="setTheme('green')" title="Green"></div>
+            <div class="color-option" data-theme="orange" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);" onclick="setTheme('orange')" title="Orange"></div>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Starfield Background</span>
+            <div class="setting-toggle active" id="starfield-toggle" onclick="toggleStarfield()"></div>
+          </div>
+          <div class="setting-hint">Enable animated starfield background effect</div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">3D Effects</span>
+            <div class="setting-toggle active" id="effects-toggle" onclick="toggle3DEffects()"></div>
+          </div>
+          <div class="setting-hint">Enable 3D depth and shadow effects</div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Font Size</span>
+          </div>
+          <div class="setting-hint">Adjust UI text size</div>
+          <select id="font-size" class="setting-select">
+            <option value="small">Small (12px)</option>
+            <option value="medium" selected>Medium (13px)</option>
+            <option value="large">Large (14px)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- System Section -->
+      <div id="system-section" class="settings-section hidden">
+        <h3>⚡ System Configuration</h3>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Database Host</span>
+          </div>
+          <div class="setting-hint">PostgreSQL database host</div>
+          <input type="text" id="db-host" class="setting-input" placeholder="localhost" value="localhost">
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Database Port</span>
+          </div>
+          <div class="setting-hint">PostgreSQL port</div>
+          <input type="number" id="db-port" class="setting-input" placeholder="5432" value="5432">
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Redis URL</span>
+          </div>
+          <div class="setting-hint">Redis connection string</div>
+          <input type="text" id="redis-url" class="setting-input" placeholder="redis://localhost:6379">
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Auto-save Workspace</span>
+            <div class="setting-toggle active" id="autosave-toggle" onclick="toggleAutosave()"></div>
+          </div>
+          <div class="setting-hint">Automatically save workspace changes</div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Job Timeout (seconds)</span>
+          </div>
+          <div class="setting-hint">Maximum time for job execution</div>
+          <input type="number" id="job-timeout" class="setting-input" placeholder="300" value="300">
+        </div>
+      </div>
+
+      <!-- About Section -->
+      <div id="about-section" class="settings-section hidden">
+        <h3>ℹ️ About Ultra Agent OS</h3>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Version</span>
+          </div>
+          <input type="text" class="setting-input" value="3.0.0" disabled style="opacity: 0.7;">
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Status</span>
+          </div>
+          <div class="test-status">
+            <span class="status-dot"></span>
+            <span>System Operational</span>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Documentation</span>
+          </div>
+          <a href="/docs" style="color: var(--accent); text-decoration: none; font-weight: 600;">📚 Open Documentation</a>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-label-text">Support</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary);">
+            For issues and support, visit the project repository or contact the development team.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-footer">
+      <button class="btn danger" onclick="resetSettings()">🔄 Reset to Defaults</button>
+      <button class="btn" onclick="goBack()">← Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stars background -->
+<div id="stars-container"></div>
+
+<script src="/src/notifications.js"></script>
+<script>
+// Initialize starfield
+function initStarfield() {
+  const container = document.getElementById('stars-container');
+  const starCount = 100;
+  
+  for (let i = 0; i < starCount; i++) {
+    const star = document.createElement('div');
+    star.className = 'star';
+    star.style.left = Math.random() * 100 + '%';
+    star.style.top = Math.random() * 100 + '%';
+    star.style.width = (Math.random() * 2 + 0.5) + 'px';
+    star.style.height = star.style.width;
+    star.style.animationDelay = Math.random() * 3 + 's';
+    container.appendChild(star);
+  }
+}
+
+// Section switching
+function showSection(section) {
+  // Hide all sections
+  document.querySelectorAll('.settings-section').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.settings-menu-item').forEach(el => el.classList.remove('active'));
+  
+  // Show selected section
+  document.getElementById(section + '-section').classList.remove('hidden');
+  event.target.closest('.settings-menu-item').classList.add('active');
+  
+  // Update title
+  const titles = {
+    llm: '🤖 LLM Configuration',
+    appearance: '🎨 Appearance & Theme',
+    system: '⚡ System Configuration',
+    about: 'ℹ️ About Ultra Agent OS'
+  };
+  document.getElementById('section-title').textContent = titles[section];
+}
+
+// LLM Provider handling
+function updateLLMFields() {
+  const provider = document.getElementById('llm-provider').value;
+  
+  // Hide all provider fields
+  document.getElementById('ollama-fields').classList.add('hidden');
+  document.getElementById('openai-fields').classList.add('hidden');
+  document.getElementById('gemini-fields').classList.add('hidden');
+  document.getElementById('claude-fields').classList.add('hidden');
+  
+  // Show selected provider
+  document.getElementById(provider + '-fields').classList.remove('hidden');
+}
+
+// Test Settings with enhanced error handling
+async function testSettings() {
+  const provider = document.getElementById('llm-provider').value;
+  const resultDiv = document.getElementById('test-result');
+  const resultContent = document.getElementById('test-result-content');
+  const resultText = document.getElementById('test-result-text');
+  
+  resultDiv.classList.remove('hidden');
+  resultText.textContent = 'Testing...';
+  resultContent.classList.remove('error');
+  
+  try {
+    let testData = {
+      provider: provider,
+      test: 'connection'
+    };
+    
+    // Validate inputs based on provider
+    if (provider === 'ollama') {
+      const url = document.getElementById('ollama-url').value.trim();
+      const model = document.getElementById('ollama-model').value.trim();
+      
+      if (!url) {
+        throw new Error('Ollama URL is required');
+      }
+      if (!model) {
+        throw new Error('Ollama model is required');
+      }
+      
+      // Validate URL format
+      try {
+        new URL(url);
+      } catch {
+        throw new Error('Invalid Ollama URL format');
+      }
+      
+      testData.url = url;
+      testData.model = model;
+    } else if (provider === 'openai') {
+      const apiKey = document.getElementById('openai-api-key').value.trim();
+      const model = document.getElementById('openai-model').value;
+      
+      if (!apiKey) {
+        throw new Error('OpenAI API key is required');
+      }
+      if (!apiKey.startsWith('sk-')) {
+        throw new Error('Invalid OpenAI API key format');
+      }
+      
+      testData.apiKey = apiKey;
+      testData.model = model;
+    } else if (provider === 'gemini') {
+      const apiKey = document.getElementById('gemini-api-key').value.trim();
+      const model = document.getElementById('gemini-model').value;
+      
+      if (!apiKey) {
+        throw new Error('Gemini API key is required');
+      }
+      if (!apiKey.startsWith('AIza')) {
+        throw new Error('Invalid Gemini API key format');
+      }
+      
+      testData.apiKey = apiKey;
+      testData.model = model;
+    } else if (provider === 'claude') {
+      const apiKey = document.getElementById('claude-api-key').value.trim();
+      const model = document.getElementById('claude-model').value;
+      
+      if (!apiKey) {
+        throw new Error('Claude API key is required');
+      }
+      if (!apiKey.startsWith('sk-ant-')) {
+        throw new Error('Invalid Claude API key format');
+      }
+      
+      testData.apiKey = apiKey;
+      testData.model = model;
+    }
+    
+    const response = await fetch(`${window.API_URL}/api/adapters/test`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(testData)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      resultText.textContent = `✅ ${provider.toUpperCase()} connection successful!`;
+      resultContent.classList.remove('error');
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error('Test settings error:', error);
+    resultContent.classList.add('error');
+    
+    // Provide user-friendly error messages
+    let userMessage = error.message;
+    if (error.message.includes('fetch')) {
+      userMessage = 'Network error - check API connection';
+    } else if (error.message.includes('Failed to fetch')) {
+      userMessage = 'API server unavailable';
+    }
+    
+    resultText.textContent = `❌ Test failed: ${userMessage}`;
+  }
+}
+
+// Save Settings with enhanced validation
+async function saveSettings() {
+  try {
+    // Validate required fields before saving
+    const provider = document.getElementById('llm-provider').value;
+    
+    if (provider === 'ollama') {
+      const url = document.getElementById('ollama-url').value.trim();
+      const model = document.getElementById('ollama-model').value.trim();
+      
+      if (!url) {
+        throw new Error('Ollama URL is required');
+      }
+      if (!model) {
+        throw new Error('Ollama model is required');
+      }
+    } else if (provider === 'openai') {
+      const apiKey = document.getElementById('openai-api-key').value.trim();
+      if (!apiKey || !apiKey.startsWith('sk-')) {
+        throw new Error('Valid OpenAI API key is required');
+      }
+    } else if (provider === 'gemini') {
+      const apiKey = document.getElementById('gemini-api-key').value.trim();
+      if (!apiKey || !apiKey.startsWith('AIza')) {
+        throw new Error('Valid Gemini API key is required');
+      }
+    } else if (provider === 'claude') {
+      const apiKey = document.getElementById('claude-api-key').value.trim();
+      if (!apiKey || !apiKey.startsWith('sk-ant-')) {
+        throw new Error('Valid Claude API key is required');
+      }
+    }
+    
+    const settings = {
+      llm: {
+        provider: provider
+      },
+      appearance: {
+        theme: document.querySelector('.color-option.selected')?.getAttribute('data-theme') || 'blue',
+        starfield: document.getElementById('starfield-toggle').classList.contains('active'),
+        effects3d: document.getElementById('effects-toggle').classList.contains('active'),
+        fontSize: document.getElementById('font-size').value
+      },
+      system: {
+        dbHost: document.getElementById('db-host').value,
+        dbPort: document.getElementById('db-port').value,
+        redisUrl: document.getElementById('redis-url').value,
+        autosave: document.getElementById('autosave-toggle').classList.contains('active'),
+        jobTimeout: document.getElementById('job-timeout').value
+      }
+    };
+    
+    // Save provider-specific settings
+    if (provider === 'ollama') {
+      settings.llm.url = document.getElementById('ollama-url').value;
+      settings.llm.model = document.getElementById('ollama-model').value;
+    } else if (provider === 'openai') {
+      settings.llm.apiKey = document.getElementById('openai-api-key').value;
+      settings.llm.model = document.getElementById('openai-model').value;
+    } else if (provider === 'gemini') {
+      settings.llm.apiKey = document.getElementById('gemini-api-key').value;
+      settings.llm.model = document.getElementById('gemini-model').value;
+    } else if (provider === 'claude') {
+      settings.llm.apiKey = document.getElementById('claude-api-key').value;
+      settings.llm.model = document.getElementById('claude-model').value;
+    }
+    
+    // Save to database via API
+    const response = await fetch(`${window.API_URL}/api/user/settings`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ settings })
+    });
+    
+    if (response.ok) {
+      // Apply settings immediately
+      applySettings(settings);
+      if (typeof notifications !== 'undefined') {
+        notifications.success('Settings saved successfully!', 'Success');
+      } else {
+        alert('✅ Settings saved successfully!');
+      }
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to save settings to database');
+    }
+  } catch (error) {
+    console.error('Save settings error:', error);
+    
+    // Provide user-friendly error messages
+    let userMessage = error.message;
+    if (error.message.includes('fetch')) {
+      userMessage = 'Network error - check connection to API server';
+    } else if (error.message.includes('401') || error.message.includes('403')) {
+      userMessage = 'Authentication error - please log in again';
+    }
+    
+    if (typeof notifications !== 'undefined') {
+      notifications.error(`Error: ${userMessage}`, 'Settings Error');
+    } else {
+      alert(`❌ Error: ${userMessage}`);
+    }
+  }
+}
+
+// Reset Settings
+async function resetSettings() {
+  if (confirm('Are you sure you want to reset all settings to defaults?')) {
+    try {
+      // Delete from database
+      const response = await fetch(`${window.API_URL}/api/user/settings`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Clear local storage regardless of API response
+      localStorage.removeItem('ultra-agent-settings');
+      location.reload();
+    } catch (error) {
+      console.error('Reset settings error:', error);
+      localStorage.removeItem('ultra-agent-settings');
+      location.reload();
+    }
+  }
+}
+
+// Toggle functions
+function toggleStarfield() {
+  const toggle = document.getElementById('starfield-toggle');
+  toggle.classList.toggle('active');
+}
+
+function toggle3DEffects() {
+  const toggle = document.getElementById('effects-toggle');
+  toggle.classList.toggle('active');
+}
+
+function toggleAutosave() {
+  const toggle = document.getElementById('autosave-toggle');
+  toggle.classList.toggle('active');
+}
+
+function setTheme(theme) {
+  document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
+  event.target.classList.add('selected');
+  
+  // Apply theme immediately via CSS variables
+  const themeColors = {
+    blue: { primary: '#0a1428', secondary: '#1a2847', accent: '#4a9eff', accentDark: '#3a7ee6' },
+    purple: { primary: '#1a0b2e', secondary: '#2d1b69', accent: '#8b5cf6', accentDark: '#7c3aed' },
+    pink: { primary: '#2d1b21', secondary: '#4a1f31', accent: '#ec4899', accentDark: '#db2777' },
+    green: { primary: '#0a1f1b', secondary: '#1a2e28', accent: '#10b981', accentDark: '#059669' },
+    orange: { primary: '#1f0f08', secondary: '#3a1f0f', accent: '#f97316', accentDark: '#ea580c' }
+  };
+  
+  const colors = themeColors[theme] || themeColors.blue;
+  const root = document.documentElement;
+  
+  root.style.setProperty('--primary', colors.primary);
+  root.style.setProperty('--secondary', colors.secondary);
+  root.style.setProperty('--accent', colors.accent);
+  root.style.setProperty('--accent-dark', colors.accentDark);
+  root.style.setProperty('--background', colors.primary);
+  root.style.setProperty('--surface', colors.secondary);
+}
+
+function goBack() {
+  window.location.href = '/';
+}
+
+// Apply settings dynamically to the UI
+function applySettings(settings) {
+  if (!settings) return;
+  
+  // Apply appearance settings
+  if (settings.appearance) {
+    const { theme, starfield, effects3d, fontSize } = settings.appearance;
+    
+    // Apply theme
+    if (theme) {
+      const themeColors = {
+        blue: { primary: '#0a1428', secondary: '#1a2847', accent: '#4a9eff', accentDark: '#3a7ee6' },
+        purple: { primary: '#1a0b2e', secondary: '#2d1b69', accent: '#8b5cf6', accentDark: '#7c3aed' },
+        pink: { primary: '#2d1b21', secondary: '#4a1f31', accent: '#ec4899', accentDark: '#db2777' },
+        green: { primary: '#0a1f1b', secondary: '#1a2e28', accent: '#10b981', accentDark: '#059669' },
+        orange: { primary: '#1f0f08', secondary: '#3a1f0f', accent: '#f97316', accentDark: '#ea580c' }
+      };
+      
+      const colors = themeColors[theme] || themeColors.blue;
+      const root = document.documentElement;
+      
+      root.style.setProperty('--primary', colors.primary);
+      root.style.setProperty('--secondary', colors.secondary);
+      root.style.setProperty('--accent', colors.accent);
+      root.style.setProperty('--accent-dark', colors.accentDark);
+      root.style.setProperty('--background', colors.primary);
+      root.style.setProperty('--surface', colors.secondary);
+    }
+    
+    // Apply starfield
+    if (typeof starfield === 'boolean') {
+      const starsContainer = document.getElementById('stars-container');
+      if (starsContainer) {
+        starsContainer.style.display = starfield ? 'block' : 'none';
+      }
+    }
+    
+    // Apply 3D effects
+    if (typeof effects3d === 'boolean') {
+      document.body.style.setProperty('--enable-3d', effects3d ? '1' : '0');
+    }
+    
+    // Apply font size
+    if (fontSize) {
+      const fontSizeMap = { small: '12px', medium: '13px', large: '14px' };
+      document.documentElement.style.setProperty('--base-font-size', fontSizeMap[fontSize] || '13px');
+    }
+  }
+}
+
+// Load settings from database on page load
+async function loadSettings() {
+  try {
+    const response = await fetch(`${window.API_URL}/api/user/settings`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const settings = data.settings;
+      
+      // Populate form fields
+      if (settings.llm) {
+        document.getElementById('llm-provider').value = settings.llm.provider || 'ollama';
+        updateLLMFields();
+        
+        if (settings.llm.provider === 'ollama') {
+          document.getElementById('ollama-url').value = settings.llm.url || 'http://ollama:11434';
+          document.getElementById('ollama-model').value = settings.llm.model || 'llama3.2';
+        }
+      }
+      
+      if (settings.appearance) {
+        // Set theme
+        const theme = settings.appearance.theme || 'blue';
+        document.querySelectorAll('.color-option').forEach(el => {
+          el.classList.remove('selected');
+          if (el.getAttribute('data-theme') === theme || 
+              (theme === 'blue' && el.style.background.includes('4a9eff'))) {
+            el.classList.add('selected');
+          }
+        });
+        
+        // Set toggles
+        const starfieldToggle = document.getElementById('starfield-toggle');
+        const effectsToggle = document.getElementById('effects-toggle');
+        
+        if (settings.appearance.starfield) starfieldToggle.classList.add('active');
+        else starfieldToggle.classList.remove('active');
+        
+        if (settings.appearance.effects3d) effectsToggle.classList.add('active');
+        else effectsToggle.classList.remove('active');
+        
+        // Set font size
+        document.getElementById('font-size').value = settings.appearance.fontSize || 'medium';
+      }
+      
+      // Apply settings immediately
+      applySettings(settings);
+    }
+  } catch (error) {
+    console.error('Load settings error:', error);
+    // Fallback to localStorage
+    const localSettings = localStorage.getItem('ultra-agent-settings');
+    if (localSettings) {
+      const settings = JSON.parse(localSettings);
+      applySettings(settings);
+    }
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  initStarfield();
+  updateLLMFields();
+  loadSettings();
+});
+</script>
+
+</body>
+</html>

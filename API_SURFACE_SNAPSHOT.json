@@ -1,0 +1,273 @@
+{
+  "snapshot_timestamp": "2026-02-02T01:50:00+03:00",
+  "orchestration": "ONE_PROMPT_TOTAL_ENTERPRISE_REBUILD_DASHBOARD_LINK_VALIDATE_AND_HARD_FREEZE",
+  "api_base_url": "http://localhost:3000",
+  "total_endpoints": 14,
+  "authentication_required": true,
+  "jwt_based": true,
+  "endpoints": {
+    "system": {
+      "root": {
+        "method": "GET",
+        "path": "/",
+        "description": "System status and information",
+        "auth_required": false,
+        "response_shape": {
+          "status": "string",
+          "service": "string", 
+          "version": "string",
+          "timestamp": "string"
+        }
+      },
+      "health": {
+        "method": "GET",
+        "path": "/health",
+        "description": "Health check endpoint",
+        "auth_required": false,
+        "response_shape": {
+          "status": "string",
+          "timestamp": "string",
+          "uptime": "number"
+        }
+      }
+    },
+    "authentication": {
+      "login": {
+        "method": "POST",
+        "path": "/api/auth/login",
+        "description": "User authentication",
+        "auth_required": false,
+        "request_shape": {
+          "username": "string",
+          "password": "string"
+        },
+        "response_shape": {
+          "token": "string",
+          "user": {
+            "id": "number",
+            "username": "string",
+            "role": "string",
+            "tenantId": "string"
+          }
+        }
+      }
+    },
+    "jobs": {
+      "create": {
+        "method": "POST",
+        "path": "/api/chat",
+        "description": "Create new chat/job",
+        "auth_required": true,
+        "request_shape": {
+          "message": "string"
+        },
+        "response_shape": {
+          "jobId": "string",
+          "status": "string",
+          "message": "string"
+        }
+      },
+      "list": {
+        "method": "GET",
+        "path": "/api/jobs",
+        "description": "List user jobs",
+        "auth_required": true,
+        "response_shape": {
+          "jobs": "array"
+        }
+      },
+      "get": {
+        "method": "GET",
+        "path": "/api/jobs/:jobId",
+        "description": "Get specific job details",
+        "auth_required": true,
+        "params": {
+          "jobId": "string"
+        },
+        "response_shape": {
+          "jobId": "string",
+          "status": "string",
+          "input_data": "object",
+          "output_data": "object",
+          "created_at": "string",
+          "updated_at": "string"
+        }
+      }
+    },
+    "memory": {
+      "write": {
+        "method": "POST",
+        "path": "/api/memory/:filename",
+        "description": "Write data to memory",
+        "auth_required": true,
+        "params": {
+          "filename": "string"
+        },
+        "request_shape": {
+          "data": "object"
+        },
+        "response_shape": {
+          "success": "boolean",
+          "message": "string"
+        }
+      },
+      "read": {
+        "method": "GET",
+        "path": "/api/memory/:filename",
+        "description": "Read data from memory",
+        "auth_required": true,
+        "params": {
+          "filename": "string"
+        },
+        "response_shape": {
+          "data": "object"
+        }
+      },
+      "workspace": {
+        "method": "GET",
+        "path": "/api/memory/",
+        "description": "Get workspace overview",
+        "auth_required": true,
+        "response_shape": {
+          "memories": "array",
+          "active_jobs": "number",
+          "workspace_info": "string"
+        }
+      }
+    },
+    "workspace_alt": {
+      "get": {
+        "method": "GET",
+        "path": "/api/workspace",
+        "description": "Alternative workspace endpoint",
+        "auth_required": true,
+        "response_shape": {
+          "memories": "array",
+          "active_jobs": "number",
+          "workspace_info": "string"
+        }
+      }
+    },
+    "adapters": {
+      "status": {
+        "method": "GET",
+        "path": "/api/adapters/status",
+        "description": "Get system adapter status",
+        "auth_required": true,
+        "response_shape": {
+          "redis": {
+            "available": "boolean",
+            "status": "string",
+            "queue_length": "number",
+            "queue_status": "string",
+            "backlog_limit": "number",
+            "is_overloaded": "boolean"
+          },
+          "database": {
+            "available": "boolean",
+            "status": "string",
+            "error": "string|null",
+            "type": "string"
+          },
+          "core": {
+            "status": "string",
+            "message": "string",
+            "uptime": "number",
+            "memory": {
+              "rss": "number",
+              "heapTotal": "number",
+              "heapUsed": "number",
+              "external": "number",
+              "arrayBuffers": "number"
+            }
+          }
+        }
+      },
+      "test": {
+        "method": "POST",
+        "path": "/api/adapters/test",
+        "description": "Test specific adapter",
+        "auth_required": true,
+        "request_shape": {
+          "adapter": "string",
+          "test_type": "string"
+        },
+        "response_shape": {
+          "success": "boolean",
+          "result": "string"
+        }
+      }
+    },
+    "admin": {
+      "tenants_list": {
+        "method": "GET",
+        "path": "/api/admin/tenants",
+        "description": "List all tenants",
+        "auth_required": true,
+        "role_required": "admin",
+        "response_shape": {
+          "tenants": "array"
+        }
+      },
+      "tenants_create": {
+        "method": "POST",
+        "path": "/api/admin/tenants",
+        "description": "Create new tenant",
+        "auth_required": true,
+        "role_required": "admin",
+        "request_shape": {
+          "name": "string",
+          "tenantId": "string"
+        },
+        "response_shape": {
+          "success": "boolean",
+          "tenant": {
+            "id": "string",
+            "name": "string"
+          }
+        }
+      }
+    }
+  },
+  "websocket_endpoints": {
+    "main": {
+      "path": "/ws",
+      "description": "Main WebSocket connection",
+      "auth_required": true,
+      "events": {
+        "job_status_update": "Job status changes",
+        "system_notifications": "System-wide notifications",
+        "queue_updates": "Queue status changes"
+      }
+    }
+  },
+  "authentication": {
+    "type": "JWT Bearer Token",
+    "header": "Authorization: Bearer <token>",
+    "login_endpoint": "/api/auth/login",
+    "token_expiry": "24 hours",
+    "roles": ["user", "admin"]
+  },
+  "error_responses": {
+    "400": "Bad Request - Validation errors",
+    "401": "Unauthorized - Invalid or missing token",
+    "403": "Forbidden - Insufficient permissions", 
+    "404": "Not Found - Endpoint or resource not found",
+    "429": "Too Many Requests - Rate limit exceeded",
+    "500": "Internal Server Error - Unexpected server error"
+  },
+  "rate_limiting": {
+    "login_endpoint": {
+      "window": "15 minutes",
+      "max_attempts": 5,
+      "block_duration": "15 minutes"
+    }
+  },
+  "validation_status": {
+    "last_tested": "2026-02-02T01:35:00+03:00",
+    "success_rate": "100%",
+    "total_tests": 14,
+    "passed_tests": 14,
+    "failed_tests": 0
+  }
+}

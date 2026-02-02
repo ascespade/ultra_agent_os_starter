@@ -1,0 +1,90 @@
+{
+  "test_session": {
+    "timestamp": "2026-02-02T04:33:00Z",
+    "phase": "PHASE_2_FUNCTIONAL_TESTING",
+    "overall_status": "FAILED",
+    "success_rate": 0.75,
+    "api_base_url": "http://localhost:3000"
+  },
+  "failed_tests": [
+    {
+      "endpoint": "POST /api/memory/:file",
+      "error": "Database constraint violation - unique_active_memory",
+      "severity": "HIGH",
+      "impact": "Data persistence failure",
+      "status": "FAILED",
+      "test_request": {"content": "test memory content"},
+      "test_response": {"error": "Memory write failed"}
+    },
+    {
+      "endpoint": "GET /ui/",
+      "error": "Static files not served by API service",
+      "severity": "HIGH", 
+      "impact": "No user interface access",
+      "status": "FAILED",
+      "test_response": {"error": "Not found", "path": "/index.html"}
+    },
+    {
+      "endpoint": "GET /dashboard",
+      "error": "Dashboard routing missing in API service",
+      "severity": "HIGH",
+      "impact": "No dashboard access",
+      "status": "FAILED",
+      "test_response": {"error": "Not found"}
+    }
+  ],
+  "passed_tests": [
+    {
+      "endpoint": "GET /health",
+      "status": "PASS",
+      "response_time_ms": 100
+    },
+    {
+      "endpoint": "POST /api/auth/login",
+      "status": "PASS",
+      "credentials": "admin/admin"
+    },
+    {
+      "endpoint": "POST /api/chat",
+      "status": "PASS",
+      "job_created": "67d76791-a902-4d6e-8bb2-dfd2a3b8fa7c"
+    },
+    {
+      "endpoint": "GET /api/jobs",
+      "status": "PASS",
+      "auth_required": true
+    },
+    {
+      "endpoint": "GET /api/jobs/:id",
+      "status": "PASS"
+    },
+    {
+      "endpoint": "GET /api/workspace",
+      "status": "PASS"
+    },
+    {
+      "endpoint": "GET /api/adapters/status",
+      "status": "PASS",
+      "database": "connected",
+      "redis": "connected"
+    }
+  ],
+  "worker_status": {
+    "job_processing": "PASS",
+    "lifecycle": "planning -> running -> completed",
+    "backlog_control": "PASS",
+    "queue_length": 0
+  },
+  "scoring": {
+    "api_core_functions": 90,
+    "authentication": 100,
+    "job_processing": 100,
+    "memory_system": 20,
+    "worker_service": 100,
+    "dashboard_ui": 0,
+    "overall_score": 75
+  },
+  "blocking_issues_count": 3,
+  "critical_failures": true,
+  "ready_for_phase_3": false
+}

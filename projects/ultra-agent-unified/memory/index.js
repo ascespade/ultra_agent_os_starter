@@ -1,0 +1,515 @@
+const { Pool } = require('pg');
+const redis = require('redis');
+const pino = require('pino');
+const fs = require('fs').promises;
+const path = require('path');
+
+const logger = pino({
+  name: 'memory-service',
+  level: process.env.LOG_LEVEL || 'info'
+});
+
+class MemoryService {
+  constructor() {
+    this.pool = null;
+    this.redisClient = null;
+    this.cachePrefix = 'memory:';
+    this.cacheTTL = 3600; // 1 hour
+  }
+
+  async initialize() {
+    try {
+      // Initialize database connection
+      this.pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      });
+
+      // Initialize Redis connection
+      this.redisClient = redis.createClient({
+        url: process.env.REDIS_URL
+      });
+      await this.redisClient.connect();
+
+      // Run schema migrations
+      await this.runMigrations();
+
+      logger.info('Memory service initialized successfully');
+    } catch (error) {
+      logger.error({ error: error.message }, 'Failed to initialize memory service');
+      throw error;
+    }
+  }
+
+  async runMigrations() {
+    try {
+      const schemaPath = path.join(__dirname, '../../../../lib/memory-schema.sql');
+      const schema = await fs.readFile(schemaPath, 'utf8');
+      
+      await this.pool.query(schema);
+      logger.info('Memory schema migrations completed');
+    } catch (error) {
+      logger.error({ error: error.message }, 'Failed to run memory migrations');
+      throw error;
+    }
+  }
+
+  async createMemory(tenantId, userId, filename, content, options = {}) {
+    const client = await this.pool.connect();
+    try {
+      const {
+        metadata = {},
+        tags = [],
+        expiresAt = null
+      } = options;
+
+      const contentStr = JSON.stringify(content);
+      const sizeBytes = Buffer.byteLength(contentStr, 'utf8');
+
+      const query = `
+        INSERT INTO memories (tenant_id, user_id, filename, content, metadata, tags, expires_at, size_bytes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (tenant_id, user_id, filename) 
+        DO UPDATE SET
+          content = EXCLUDED.content,
+          metadata = EXCLUDED.metadata,
+          tags = EXCLUDED.tags,
+          expires_at = EXCLUDED.expires_at,
+          size_bytes = EXCLUDED.size_bytes,
+          updated_at = NOW()
+        RETURNING id, created_at, updated_at, size_bytes
+      `;
+
+      const values = [tenantId, userId, filename, content, metadata, tags, expiresAt, sizeBytes];
+      const result = await client.query(query, values);
+
+      // Invalidate cache
+      await this.invalidateCache(tenantId, userId, filename);
+
+      logger.info({ tenantId, userId, filename, sizeBytes }, 'Memory created/updated');
+
+      return {
+        success: true,
+        memory: {
+          id: result.rows[0].id,
+          filename,
+          size_bytes: result.rows[0].size_bytes,
+          created_at: result.rows[0].created_at,
+          updated_at: result.rows[0].updated_at
+        }
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async readMemory(tenantId, userId, filename) {
+    // Try cache first
+    const cacheKey = this.getCacheKey(tenantId, userId, filename);
+    const cached = await this.redisClient.get(cacheKey);
+    
+    if (cached) {
+      logger.debug({ tenantId, userId, filename }, 'Memory cache hit');
+      const memory = JSON.parse(cached);
+      
+      // Update access count asynchronously
+      this.updateAccessCount(memory.id).catch(err => 
+        logger.error({ error: err.message }, 'Failed to update access count')
+      );
+      
+      return memory;
+    }
+
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        SELECT id, filename, content, metadata, tags, created_at, updated_at, 
+               expires_at, size_bytes, access_count, last_accessed
+        FROM active_memories
+        WHERE tenant_id = $1 AND user_id = $2 AND filename = $3
+      `;
+
+      const result = await client.query(query, [tenantId, userId, filename]);
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const memory = result.rows[0];
+
+      // Update access count
+      await this.updateAccessCount(memory.id);
+
+      // Cache the result
+      await this.redisClient.setEx(cacheKey, this.cacheTTL, JSON.stringify(memory));
+
+      logger.debug({ tenantId, userId, filename }, 'Memory read from database');
+
+      return memory;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateAccessCount(memoryId) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        UPDATE memories 
+        SET access_count = access_count + 1, last_accessed = NOW()
+        WHERE id = $1
+      `;
+      await client.query(query, [memoryId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteMemory(tenantId, userId, filename) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        UPDATE memories 
+        SET is_deleted = TRUE, updated_at = NOW()
+        WHERE tenant_id = $1 AND user_id = $2 AND filename = $3
+        RETURNING id
+      `;
+
+      const result = await client.query(query, [tenantId, userId, filename]);
+      
+      if (result.rows.length === 0) {
+        return { success: false, message: 'Memory not found' };
+      }
+
+      // Invalidate cache
+      await this.invalidateCache(tenantId, userId, filename);
+
+      logger.info({ tenantId, userId, filename }, 'Memory deleted');
+
+      return { success: true, message: 'Memory deleted successfully' };
+    } finally {
+      client.release();
+    }
+  }
+
+  async searchMemories(tenantId, userId, options = {}) {
+    const {
+      query = '',
+      tags = [],
+      metadata = {},
+      limit = 20,
+      page = 1,
+      sortBy = 'created_at',
+      sortOrder = 'DESC'
+    } = options;
+
+    const client = await this.pool.connect();
+    try {
+      let searchQuery;
+      let countQuery;
+      let queryParams = [];
+      let whereConditions = ['tenant_id = $1', 'user_id = $2', 'is_deleted = FALSE'];
+      let paramIndex = 3;
+
+      queryParams.push(tenantId, userId);
+
+      // Build WHERE conditions
+      if (query) {
+        whereConditions.push(`search_vector @@ plainto_tsquery($${paramIndex})`);
+        queryParams.push(query);
+        paramIndex++;
+      }
+
+      if (tags.length > 0) {
+        whereConditions.push(`tags && $${paramIndex}`);
+        queryParams.push(tags);
+        paramIndex++;
+      }
+
+      if (Object.keys(metadata).length > 0) {
+        whereConditions.push(`metadata @> $${paramIndex}`);
+        queryParams.push(JSON.stringify(metadata));
+        paramIndex++;
+      }
+
+      const whereClause = whereConditions.join(' AND ');
+
+      // Build search query
+      if (query) {
+        searchQuery = `
+          SELECT 
+            id, filename, content, metadata, tags, created_at, updated_at,
+            ts_rank(search_vector, plainto_tsquery($${paramIndex})) as score,
+            ts_headline('english', content::text, plainto_tsquery($${paramIndex})) as snippet
+          FROM memories 
+          WHERE ${whereClause}
+          ORDER BY score DESC, ${sortBy} ${sortOrder}
+          LIMIT $${paramIndex + 1} OFFSET $${paramIndex + 2}
+        `;
+        
+        countQuery = `
+          SELECT COUNT(*) as total
+          FROM memories 
+          WHERE ${whereClause}
+        `;
+        
+        queryParams.push(query, limit, (page - 1) * limit);
+      } else {
+        searchQuery = `
+          SELECT id, filename, content, metadata, tags, created_at, updated_at
+          FROM memories 
+          WHERE ${whereClause}
+          ORDER BY ${sortBy} ${sortOrder}
+          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+        `;
+        
+        countQuery = `
+          SELECT COUNT(*) as total
+          FROM memories 
+          WHERE ${whereClause}
+        `;
+        
+        queryParams.push(limit, (page - 1) * limit);
+      }
+
+      const [searchResult, countResult] = await Promise.all([
+        client.query(searchQuery, queryParams),
+        client.query(countQuery, queryParams.slice(0, -2))
+      ]);
+
+      const total = parseInt(countResult.rows[0].total);
+      const results = searchResult.rows.map(row => ({
+        id: row.id,
+        filename: row.filename,
+        content: row.content,
+        metadata: row.metadata,
+        tags: row.tags,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        ...(row.score && { score: row.score }),
+        ...(row.snippet && { snippet: row.snippet })
+      }));
+
+      return {
+        results,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async getWorkspace(tenantId, userId) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        SELECT 
+          id, filename, size_bytes, created_at, tags, metadata
+        FROM active_memories
+        WHERE tenant_id = $1 AND user_id = $2
+        ORDER BY created_at DESC
+        LIMIT 100
+      `;
+
+      const result = await client.query(query, [tenantId, userId]);
+
+      const memories = result.rows.map(row => ({
+        id: row.id,
+        filename: row.filename,
+        size_bytes: row.size_bytes,
+        created_at: row.created_at,
+        tags: row.tags,
+        metadata: row.metadata
+      }));
+
+      // Get summary statistics
+      const summaryQuery = `
+        SELECT 
+          COUNT(*) as total_count,
+          SUM(size_bytes) as total_size,
+          COUNT(CASE WHEN tags && '{config}' THEN 1 END) as config_count,
+          COUNT(CASE WHEN tags && '{preference}' THEN 1 END) as preference_count
+        FROM active_memories
+        WHERE tenant_id = $1 AND user_id = $2
+      `;
+
+      const summaryResult = await client.query(summaryQuery, [tenantId, userId]);
+
+      return {
+        memories,
+        total_count: parseInt(summaryResult.rows[0].total_count),
+        total_size: parseInt(summaryResult.rows[0].total_size || 0),
+        config_count: parseInt(summaryResult.rows[0].config_count || 0),
+        preference_count: parseInt(summaryResult.rows[0].preference_count || 0),
+        workspace_info: {
+          tenant_id: tenantId,
+          user_id: userId
+        }
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async getMemoryStats(tenantId = null, userId = null) {
+    const client = await this.pool.connect();
+    try {
+      let whereClause = 'WHERE is_deleted = FALSE';
+      let queryParams = [];
+
+      if (tenantId) {
+        whereClause += ' AND tenant_id = $1';
+        queryParams.push(tenantId);
+      }
+
+      if (userId) {
+        const paramIndex = queryParams.length + 1;
+        whereClause += ` AND user_id = $${paramIndex}`;
+        queryParams.push(userId);
+      }
+
+      const query = `
+        SELECT 
+          COUNT(*) as total_memories,
+          SUM(size_bytes) as total_size_bytes,
+          SUM(access_count) as total_access_count,
+          COUNT(CASE WHEN is_archived = TRUE THEN 1 END) as archived_count,
+          COUNT(CASE WHEN expires_at IS NOT NULL AND expires_at <= NOW() THEN 1 END) as expired_count,
+          AVG(size_bytes) as avg_size_bytes,
+          MAX(created_at) as latest_memory,
+          MIN(created_at) as oldest_memory
+        FROM memories
+        ${whereClause}
+      `;
+
+      const result = await client.query(query, queryParams);
+
+      return {
+        total_memories: parseInt(result.rows[0].total_memories),
+        total_size_bytes: parseInt(result.rows[0].total_size_bytes || 0),
+        total_access_count: parseInt(result.rows[0].total_access_count || 0),
+        archived_count: parseInt(result.rows[0].archived_count || 0),
+        expired_count: parseInt(result.rows[0].expired_count || 0),
+        avg_size_bytes: parseFloat(result.rows[0].avg_size_bytes || 0),
+        latest_memory: result.rows[0].latest_memory,
+        oldest_memory: result.rows[0].oldest_memory
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async applyRetentionPolicy(policy, dryRun = true) {
+    const client = await this.pool.connect();
+    try {
+      let query;
+      let queryParams = [];
+      let description;
+
+      switch (policy.type) {
+        case 'age':
+          query = `
+            UPDATE memories 
+            SET is_deleted = TRUE, updated_at = NOW()
+            WHERE is_deleted = FALSE 
+              AND created_at < NOW() - INTERVAL '${policy.days} days'
+          `;
+          description = `Delete memories older than ${policy.days} days`;
+          break;
+
+        case 'size':
+          query = `
+            WITH memories_to_delete AS (
+              SELECT id
+              FROM memories
+              WHERE is_deleted = FALSE
+              ORDER BY created_at ASC
+            ),
+            total_size AS (
+              SELECT COALESCE(SUM(size_bytes), 0) as total
+              FROM memories
+              WHERE is_deleted = FALSE
+            )
+            UPDATE memories 
+            SET is_deleted = TRUE, updated_at = NOW()
+            WHERE id IN (
+              SELECT id FROM memories_to_delete
+              WHERE (SELECT total FROM total_size) - size_bytes > $1
+            )
+          `;
+          queryParams.push(policy.max_size_bytes);
+          description = `Delete memories to stay under ${policy.max_size_bytes} bytes`;
+          break;
+
+        case 'tags':
+          query = `
+            UPDATE memories 
+            SET is_deleted = TRUE, updated_at = NOW()
+            WHERE is_deleted = FALSE AND tags && $1
+          `;
+          queryParams.push(policy.tags);
+          description = `Delete memories with tags: ${policy.tags.join(', ')}`;
+          break;
+
+        default:
+          throw new Error(`Unknown retention policy type: ${policy.type}`);
+      }
+
+      if (dryRun) {
+        // Count what would be deleted
+        const countQuery = query.replace('UPDATE memories SET is_deleted = TRUE', 'SELECT COUNT(*) as count');
+        const result = await client.query(countQuery, queryParams);
+        
+        return {
+          dry_run: true,
+          affected_memories: parseInt(result.rows[0].count),
+          description,
+          policy
+        };
+      } else {
+        // Get size before deletion
+        const sizeQuery = query.replace('UPDATE memories SET is_deleted = TRUE', 'SELECT COALESCE(SUM(size_bytes), 0) as total_size');
+        const sizeResult = await client.query(sizeQuery, queryParams);
+        const totalSizeFreed = parseInt(sizeResult.rows[0].total_size || 0);
+
+        // Execute deletion
+        const result = await client.query(query, queryParams);
+
+        return {
+          dry_run: false,
+          affected_memories: result.rowCount,
+          total_size_freed: totalSizeFreed,
+          description,
+          policy
+        };
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  getCacheKey(tenantId, userId, filename) {
+    return `${this.cachePrefix}${tenantId}:${userId}:${filename}`;
+  }
+
+  async invalidateCache(tenantId, userId, filename) {
+    const cacheKey = this.getCacheKey(tenantId, userId, filename);
+    await this.redisClient.del(cacheKey);
+  }
+
+  async cleanup() {
+    if (this.redisClient) {
+      await this.redisClient.quit();
+    }
+    if (this.pool) {
+      await this.pool.end();
+    }
+  }
+}
+
+module.exports = new MemoryService();

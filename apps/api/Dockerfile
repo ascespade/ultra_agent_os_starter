@@ -2,20 +2,29 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Replicate monorepo layout so require('../../../lib/...') resolves correctly
-COPY apps/api/package*.json ./apps/api/
-RUN cd apps/api && npm install --omit=dev
+# Copy package files
+COPY apps/api/package*.json ./
 
-# Install shared lib deps at root so lib/* can resolve pg, etc.
-RUN echo '{"dependencies":{"pg":"^8.11.5"}}' > package.json && npm install --omit=dev
+# Install dependencies (use install for stability)
+RUN npm install --only=production
 
-COPY apps/api/src/ ./apps/api/src/
-COPY lib/ ./lib/
-COPY config/ ./config/
-COPY plugins/ ./plugins/
+# Copy source code
+COPY apps/api/src ./apps/api/src
+COPY apps/ui/src ./apps/ui/src
+COPY lib ./lib
 
-WORKDIR /app/apps/api
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S apiuser -u 1001
+
+# Change ownership of the app directory
+RUN chown -R apiuser:nodejs /app
+USER apiuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["node", "apps/api/src/server.js"]

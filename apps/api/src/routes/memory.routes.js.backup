@@ -1,0 +1,24 @@
+const express = require('express');
+const memoryController = require('../controllers/memory.controller');
+const { authenticateToken } = require('../middleware/auth.middleware');
+const { validate } = require('../middleware/validateZod');
+
+const router = express.Router();
+
+router.use(authenticateToken);
+
+// Routes with proper validation
+router.post('/:filename', validate.memoryData, memoryController.writeMemory);
+router.get('/:filename', validate.filename, memoryController.readMemory);
+router.put('/:filename', [validate.filename, validate.memoryData], memoryController.updateMemory);
+router.delete('/:filename', validate.filename, memoryController.deleteMemory);
+
+// Search and workspace routes
+router.get('/search', validate.pagination, memoryController.searchMemories);
+router.get('/workspace', validate.pagination, memoryController.getWorkspace);
+router.get('/stats', memoryController.getMemoryStats);
+
+// Admin routes (for retention policies)
+router.post('/retention', memoryController.applyRetentionPolicy);
+
+module.exports = router;

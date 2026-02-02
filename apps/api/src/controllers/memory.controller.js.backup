@@ -1,0 +1,249 @@
+const simpleMemoryService = require("../services/simple-memory.service");
+const pino = require('pino');
+
+const logger = pino({
+  name: 'memory-controller',
+  level: process.env.LOG_LEVEL || 'info'
+});
+
+async function writeMemory(req, res) {
+  const { filename } = req.params;
+  const { content, data, metadata = {}, tags = [], expiresAt } = req.body;
+  const tenantId = req.tenantId;
+
+  // Validate required fields
+  if (!filename || typeof filename !== 'string') {
+    return res.status(400).json({
+      error: "Bad request",
+      message: "Filename is required and must be a string"
+    });
+  }
+
+  // Support both 'content' and 'data' for compatibility, but require one
+  const memoryContent = content || data;
+  if (!memoryContent) {
+    return res.status(400).json({
+      error: "Bad request", 
+      message: "Either 'content' or 'data' field is required"
+    });
+  }
+
+  try {
+    const result = await simpleMemoryService.createMemory(
+      tenantId,
+      req.user.userId,
+      filename,
+      memoryContent,
+      { metadata, tags, expiresAt }
+    );
+
+    logger.info({ tenantId, userId: req.user.userId, filename }, 'Memory written successfully');
+
+    res.json(result);
+  } catch (error) {
+    logger.error({ error: error.message, filename, tenantId }, 'Memory write failed');
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: "Memory write failed"
+    });
+  }
+}
+
+async function readMemory(req, res) {
+  const { filename } = req.params;
+  const tenantId = req.tenantId;
+
+  try {
+    const memory = await simpleMemoryService.readMemory(tenantId, req.user.userId, filename);
+
+    if (!memory) {
+      return res.status(404).json({
+        error: "Not found",
+        message: "Memory not found"
+      });
+    }
+
+    logger.debug({ tenantId, userId: req.user.userId, filename }, 'Memory read successfully');
+
+    res.json(memory);
+  } catch (error) {
+    logger.error({ error: error.message, filename, tenantId }, 'Memory read failed');
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: "Memory read failed"
+    });
+  }
+}
+
+async function updateMemory(req, res) {
+  const { filename } = req.params;
+  const { content, data, metadata, tags } = req.body;
+  const tenantId = req.tenantId;
+
+  // Validate required fields
+  if (!filename || typeof filename !== 'string') {
+    return res.status(400).json({
+      error: "Bad request",
+      message: "Filename is required and must be a string"
+    });
+  }
+
+  // Support both 'content' and 'data' for compatibility, but require one
+  const memoryContent = content || data;
+  if (!memoryContent) {
+    return res.status(400).json({
+      error: "Bad request", 
+      message: "Either 'content' or 'data' field is required"
+    });
+  }
+
+  try {
+    const result = await simpleMemoryService.createMemory(
+      tenantId,
+      req.user.userId,
+      filename,
+      memoryContent,
+      { metadata, tags }
+    );
+
+    logger.info({ tenantId, userId: req.user.userId, filename }, 'Memory updated successfully');
+
+    res.json(result);
+  } catch (error) {
+    logger.error({ error: error.message, filename, tenantId }, 'Memory update failed');
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: "Memory update failed"
+    });
+  }
+}
+
+async function deleteMemory(req, res) {
+  const { filename } = req.params;
+  const tenantId = req.tenantId;
+
+  try {
+    // For now, we'll implement a simple delete by marking as deleted
+    const result = await simpleMemoryService.deleteMemory(tenantId, req.user.userId, filename);
+
+    if (!result.success) {
+      return res.status(404).json({
+        error: "Not found",
+        message: result.message
+      });
+    }
+
+    logger.info({ tenantId, userId: req.user.userId, filename }, 'Memory deleted successfully');
+
+    res.json(result);
+  } catch (error) {
+    logger.error({ error: error.message, filename, tenantId }, 'Memory delete failed');
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: "Memory delete failed"
+    });
+  }
+}
+
+async function searchMemories(req, res) {
+  const tenantId = req.tenantId;
+  const { q: query, tags, metadata, limit = 20, page = 1 } = req.query;
+
+  try {
+    const searchOptions = {
+      query: query || '',
+      tags: tags ? tags.split(',').map(t => t.trim()) : [],
+      metadata: metadata ? JSON.parse(metadata) : {},
+      limit: parseInt(limit),
+      page: parseInt(page)
+    };
+
+    const result = await simpleMemoryService.searchMemories(tenantId, req.user.userId, searchOptions);
+
+    logger.debug({ tenantId, userId: req.user.userId, query, tags }, 'Memory search completed');
+
+    res.json(result);
+  } catch (error) {
+    logger.error({ error: error.message, tenantId }, 'Memory search failed');
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: "Memory search failed"
+    });
+  }
+}
+
+async function getWorkspace(req, res) {
+  const tenantId = req.tenantId;
+
+  try {
+    const workspace = await simpleMemoryService.getWorkspace(tenantId, req.user.userId);
+
+    logger.debug({ tenantId, userId: req.user.userId }, 'Workspace retrieved successfully');
+
+    res.json(workspace);
+  } catch (error) {
+    logger.error({ error: error.message, tenantId }, 'Workspace retrieval failed');
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: "Workspace retrieval failed"
+    });
+  }
+}
+
+async function getMemoryStats(req, res) {
+  const tenantId = req.tenantId;
+
+  try {
+    const stats = await simpleMemoryService.getMemoryStats(tenantId, req.user.userId);
+
+    logger.debug({ tenantId, userId: req.user.userId }, 'Memory stats retrieved successfully');
+
+    res.json(stats);
+  } catch (error) {
+    logger.error({ error: error.message, tenantId }, 'Memory stats retrieval failed');
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: "Memory stats retrieval failed"
+    });
+  }
+}
+
+async function applyRetentionPolicy(req, res) {
+  const tenantId = req.tenantId;
+  const { type, days, max_size_bytes, tags, dry_run = true } = req.body;
+
+  try {
+    const policy = { type };
+    
+    if (type === 'age') {
+      policy.days = days;
+    } else if (type === 'size') {
+      policy.max_size_bytes = max_size_bytes;
+    } else if (type === 'tags') {
+      policy.tags = tags;
+    }
+
+    const result = await simpleMemoryService.applyRetentionPolicy(policy, dry_run);
+
+    logger.info({ tenantId, userId: req.user.userId, policy, dry_run }, 'Retention policy applied');
+
+    res.json(result);
+  } catch (error) {
+    logger.error({ error: error.message, tenantId }, 'Retention policy application failed');
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: "Retention policy application failed"
+    });
+  }
+}
+
+module.exports = {
+  writeMemory,
+  readMemory,
+  updateMemory,
+  deleteMemory,
+  searchMemories,
+  getWorkspace,
+  getMemoryStats,
+  applyRetentionPolicy
+};
