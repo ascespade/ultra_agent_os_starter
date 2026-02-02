@@ -1,6 +1,29 @@
 // Load environment variables first
 require('dotenv').config({ path: require('path').join(__dirname, '../../../.env') });
 
+// Railway runtime environment validation
+console.log('[RAILWAY_ENV_VALIDATION] Starting environment check...');
+console.log('[RAILWAY_ENV_VALIDATION] DATABASE_URL present:', !!process.env.DATABASE_URL);
+console.log('[RAILWAY_ENV_VALIDATION] REDIS_URL present:', !!process.env.REDIS_URL);
+console.log('[RAILWAY_ENV_VALIDATION] NODE_ENV:', process.env.NODE_ENV);
+console.log('[RAILWAY_ENV_VALIDATION] JWT_SECRET present:', !!process.env.JWT_SECRET);
+console.log('[RAILWAY_ENV_VALIDATION] INTERNAL_API_KEY present:', !!process.env.INTERNAL_API_KEY);
+
+// Critical: Fail fast if required env is missing
+const critical = ['DATABASE_URL', 'REDIS_URL', 'NODE_ENV', 'JWT_SECRET', 'INTERNAL_API_KEY'];
+const missing = critical.filter(key => !process.env[key]);
+
+if (missing.length > 0) {
+  console.error('[RAILWAY_ENV_VALIDATION] CRITICAL: Missing required environment variables:');
+  missing.forEach(key => console.error(`[RAILWAY_ENV_VALIDATION] - ${key}`));
+  console.error('[RAILWAY_ENV_VALIDATION] Configure these in Railway Dashboard service variables');
+  process.exit(1);
+}
+
+console.log('[RAILWAY_ENV_VALIDATION] ✓ All required environment variables present');
+console.log('[RAILWAY_ENV_VALIDATION] DATABASE_URL type:', typeof process.env.DATABASE_URL);
+console.log('[RAILWAY_ENV_VALIDATION] REDIS_URL type:', typeof process.env.REDIS_URL);
+
 // Production environment validation
 const { validateProductionEnv } = require("../../../lib/production-env-validator");
 validateProductionEnv();

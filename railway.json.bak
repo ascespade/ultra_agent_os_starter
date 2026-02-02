@@ -32,6 +32,11 @@
         "interval": 30,
         "timeout": 10,
         "retries": 5
+      },
+      "env": {
+        "PORT": "3003",
+        "RAILWAY_DOCKER_EXPOSE_PORT": "3003",
+        "API_URL": "${{ultra-agent-api.RAILWAY_PUBLIC_DOMAIN}}"
       }
     }
   ],
