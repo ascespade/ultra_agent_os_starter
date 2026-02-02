@@ -48,6 +48,32 @@
           "defaultValue": ""
         }
       }
+    },
+    {
+      "name": "ultra-agent-dashboard",
+      "source": ".",
+      "dockerfilePath": "apps/ui/Dockerfile.static",
+      "healthcheck": {
+        "path": "/health",
+        "interval": 30,
+        "timeout": 10,
+        "retries": 5
+      },
+      "env": {
+        "PORT": "3003",
+        "API_URL": "${{ultra-agent-api.RAILWAY_PUBLIC_DOMAIN}}"
+      }
+    },
+    {
+      "name": "ultra-agent-websocket",
+      "source": ".",
+      "dockerfilePath": "apps/ws/Dockerfile",
+      "env": {
+        "PORT": "3002",
+        "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
+        "REDIS_URL": "${{Redis.REDIS_URL}}",
+        "JWT_SECRET": "${{JWT_SECRET}}"
+      }
     }
   ],
   "databases": {
