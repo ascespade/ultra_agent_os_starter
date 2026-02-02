@@ -1,6 +1,3 @@
-// Load environment variables first
-require('dotenv').config({ path: require('path').join(__dirname, '../../../.env') });
-
 // Railway runtime environment validation
 console.log('[RAILWAY_ENV_VALIDATION] Starting environment check...');
 console.log('[RAILWAY_ENV_VALIDATION] DATABASE_URL present:', !!process.env.DATABASE_URL);
