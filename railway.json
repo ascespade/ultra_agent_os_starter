@@ -1,50 +1,10 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "name": "ultra-agent-core-blueprint",
-  "description": "Ultra Agent OS – Core Blueprint with API, UI, Worker, PostgreSQL and Redis",
+  "build": {
+    "builder": "DOCKERFILE"
+  },
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
-  },
-  "services": [
-    {
-      "name": "ultra-agent-api",
-      "source": ".",
-      "dockerfilePath": "apps/api/Dockerfile",
-      "healthcheck": {
-        "path": "/health",
-        "interval": 30,
-        "timeout": 10,
-        "retries": 5
-      },
-      "port": 8080
-    },
-    {
-      "name": "ultra-agent-worker",
-      "source": ".",
-      "dockerfilePath": "apps/worker/Dockerfile"
-    },
-    {
-      "name": "ultra-agent-ui",
-      "source": ".",
-      "dockerfilePath": "apps/ui/Dockerfile.static",
-      "healthcheck": {
-        "path": "/health",
-        "interval": 30,
-        "timeout": 10,
-        "retries": 5
-      },
-      "port": 3003
-    }
-  ],
-  "databases": {
-    "Postgres": {
-      "version": "15",
-      "generator": "POSTGRESQL"
-    }
-  },
-  "redis": {
-    "version": "7",
-    "generator": "REDIS"
   }
 }

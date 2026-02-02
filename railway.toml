@@ -13,8 +13,14 @@ name = "ultra-agent-core-blueprint"
 # API Service
 [[services]]
 name = "ultra-agent-api"
-source = "apps/api"
+source = "."
+dockerfile = "apps/api/Dockerfile"
 icon = "🚀"
+[[services.healthcheck]]
+path = "/health"
+interval = 30
+timeout = 10
+retries = 5
 [[services.env]]
 name = "DATABASE_URL"
 serviceRef = "Postgres"
@@ -29,6 +35,9 @@ value = "production"
 [[services.env]]
 name = "HOST"
 value = "0.0.0.0"
+[[services.env]]
+name = "PORT"
+value = "8080"
 [[services.env]]
 name = "INTERNAL_API_KEY"
 generate = true
@@ -48,11 +57,20 @@ generate = true
 # UI Service
 [[services]]
 name = "ultra-agent-ui"
-source = "apps/ui"
+source = "."
+dockerfile = "apps/ui/Dockerfile.static"
 icon = "🎨"
+[[services.healthcheck]]
+path = "/health"
+interval = 30
+timeout = 10
+retries = 5
 [[services.env]]
 name = "NODE_ENV"
 value = "production"
+[[services.env]]
+name = "PORT"
+value = "3003"
 [[services.env]]
 name = "API_URL"
 serviceRef = "ultra-agent-api"
@@ -61,7 +79,8 @@ variableRef = "RAILWAY_PUBLIC_URL"
 # Worker Service
 [[services]]
 name = "ultra-agent-worker"
-source = "apps/worker"
+source = "."
+dockerfile = "apps/worker/Dockerfile"
 icon = "⚙️"
 [[services.env]]
 name = "DATABASE_URL"
