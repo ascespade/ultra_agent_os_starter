@@ -120,20 +120,19 @@ async function getWorkspace(req, res) {
     
     const workspaceData = await memoryService.getWorkspace(tenantId, req.user.userId);
     
-    // Attempt to fetch jobs
+    // Fetch real jobs
     let jobs = [];
     try {
       const jobService = require('../services/job.service');
-      // Assuming listJobs or similar exists. I haven't checked job.service.js yet.
-      // I'll leave it as empty array for now and fix in Phase 3/4 if needed, 
-      // but to be safe I'll try to require it.
+      const jobResult = await jobService.listJobs(tenantId, req.user.userId, { limit: 10 });
+      jobs = jobResult.jobs || [];
     } catch (e) {
-      logger.warn('Job service not found or failed to load');
+      logger.warn({ error: e.message }, 'Job service retrieval failed in workspace');
     }
 
     res.json({
       memories: workspaceData.memories,
-      jobs: jobs, // TODO: Populate this
+      jobs: jobs,
       stats: {
         memory_count: workspaceData.count,
         job_count: jobs.length

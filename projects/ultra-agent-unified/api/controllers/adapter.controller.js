@@ -37,7 +37,7 @@ async function getStatus(req, res) {
       redisStatus = "connected";
       
       const tenantQueueKey = `tenant:${req.tenantId}:job_queue`;
-      queueLength = await redis.lLen(tenantQueueKey);
+      queueLength = await redis.zCard(tenantQueueKey);
     } catch (error) {
       redisStatus = "error";
       redisError = error.message;

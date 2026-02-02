@@ -78,7 +78,7 @@ class Dashboard {
         await this.loadJobs();
         break;
       case 'memory':
-        await this.loadMemory();
+        await this.loadMemoryTab();
         break;
       case 'admin':
         await this.loadAdmin();
@@ -114,6 +114,15 @@ class Dashboard {
     await this.loadSystemHealth();
     await this.loadAdapterStatus();
     await this.loadRecentJobs();
+    
+    // Update dashboard stats from workspace
+    try {
+      const workspace = await window.apiClient.getWorkspace();
+      document.getElementById('activeJobs').textContent = workspace.stats?.job_count || 0;
+      document.getElementById('queueLength').textContent = workspace.stats?.memory_count || 0;
+    } catch (e) {
+      console.warn('Failed to load workspace stats for overview');
+    }
   }
 
   async loadSystemHealth() {
@@ -159,10 +168,19 @@ class Dashboard {
         `;
       }
       
+      // Memory
+      if (status.memory) {
+        html += `
+          <div class="adapter-item">
+            <strong>Memory:</strong> 
+            <span class="status-success">Simple CRUD</span>
+          </div>
+        `;
+      }
+      
       // Core
       if (status.core) {
         const uptime = Math.floor(status.core.uptime / 60);
-        document.getElementById('activeJobs').textContent = uptime + 'm';
         html += `
           <div class="adapter-item">
             <strong>Core:</strong> 
@@ -303,7 +321,7 @@ class Dashboard {
 
   // === MEMORY PAGE ===
   
-  async loadMemory() {
+  async loadMemoryTab() {
     await this.loadMemoryFiles();
   }
 

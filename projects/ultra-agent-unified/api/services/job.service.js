@@ -148,6 +148,12 @@ class JobService {
       total: result.rowCount // Approximation
     };
   }
+
+  async getJob(jobId) {
+    const pool = getPool();
+    const result = await pool.query('SELECT * FROM jobs WHERE id = $1', [jobId]);
+    return result.rows[0] || null;
+  }
   
   async getJobStats(tenantId, userId) {
     // Return dummy or real basic stats
