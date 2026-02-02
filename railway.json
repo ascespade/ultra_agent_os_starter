@@ -16,7 +16,8 @@
         "interval": 30,
         "timeout": 10,
         "retries": 5
-      }
+      },
+      "port": 8080
     },
     {
       "name": "ultra-agent-worker",
