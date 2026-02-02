@@ -11,12 +11,21 @@ console.log('[RAILWAY_ENV_VALIDATION] INTERNAL_API_KEY present:', !!process.env.
 
 // Force Railway environment variables if missing (Railway injection workaround)
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.RAILWAY_DATABASE_URL || process.env.POSTGRES_URL || 'postgresql://postgres:password@localhost:5432/railway';
+  // Try Railway service URLs first, then fallback to placeholder
+  process.env.DATABASE_URL = process.env.RAILWAY_DATABASE_URL || 
+                            process.env.POSTGRES_URL || 
+                            process.env.POSTGRES_PUBLIC_URL ||
+                            process.env.RAILWAY_POSTGRES_URL ||
+                            'postgresql://postgres:password@postgres:5432/railway';
   console.log('[RAILWAY_ENV_VALIDATION] Forced DATABASE_URL from Railway variables');
 }
 
 if (!process.env.REDIS_URL) {
-  process.env.REDIS_URL = process.env.RAILWAY_REDIS_URL || process.env.REDIS_CONNECTION_URL || 'redis://localhost:6379';
+  // Try Railway service URLs first, then fallback to placeholder
+  process.env.REDIS_URL = process.env.RAILWAY_REDIS_URL || 
+                        process.env.REDIS_CONNECTION_URL ||
+                        process.env.RAILWAY_REDIS_CONNECTION_URL ||
+                        'redis://redis:6379';
   console.log('[RAILWAY_ENV_VALIDATION] Forced REDIS_URL from Railway variables');
 }
 
