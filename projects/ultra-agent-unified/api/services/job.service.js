@@ -119,15 +119,22 @@ class JobService {
   }
 
   async enqueueJob(queueName, job) {
-    if (!this.redisClient) return; // Should be inited
-    const queueKey = this.getQueueKey(queueName);
+    if (!this.redisClient) return;
+    const tenantId = job.tenantId || 'default';
+    const queueKey = `tenant:${tenantId}:job_queue`;
     const jobData = JSON.stringify(job);
-    const score = 100 - job.priority;
-    await this.redisClient.zAdd(queueKey, score, jobData);
+    
+    // Match worker's blPop
+    await this.redisClient.lPush(queueKey, jobData);
+    
+    // Register tenant for worker
+    await this.redisClient.sAdd('tenants', tenantId);
+    
+    logger.debug({ tenantId, jobId: job.id, queueKey }, 'Job enqueued for worker');
   }
 
   getQueueKey(queueName) {
-    return `${this.queuePrefix}${queueName}`;
+    return `job_queue:${queueName}`;
   }
 
   // Basic list jobs for Dashboard

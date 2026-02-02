@@ -138,15 +138,17 @@ class JobService {
   }
 
   async enqueueJob(queueName, job) {
-    const queueKey = this.getQueueKey(queueName);
+    const tenantId = job.tenantId || 'default';
+    const queueKey = `tenant:${tenantId}:job_queue`;
     const jobData = JSON.stringify(job);
     
-    // Use Redis list with priority (higher priority = lower score)
-    const score = 100 - job.priority; // Invert priority for Redis sorted set
+    // Use Redis list (LPUSH) to match worker's BLPOP
+    await this.redisClient.lPush(queueKey, jobData);
     
-    await this.redisClient.zAdd(queueKey, score, jobData);
+    // Ensure tenant is registered for worker monitoring
+    await this.redisClient.sAdd('tenants', tenantId);
     
-    logger.debug({ queueName, jobId: job.id, priority: job.priority }, 'Job enqueued');
+    logger.debug({ tenantId, jobId: job.id, queueKey }, 'Job enqueued for worker');
   }
 
   async dequeueJob(queueName, options = {}) {
@@ -539,27 +541,23 @@ class JobService {
     }
   }
 
-  async getQueueStatus(queueName = 'default') {
-    const queueKey = this.getQueueKey(queueName);
+  async getQueueStatus(tenantId = 'default') {
+    const queueKey = `tenant:${tenantId}:job_queue`;
     
     try {
       // Get queue size
-      const queueSize = await this.redisClient.zCard(queueKey);
+      const queueSize = await this.redisClient.lLen(queueKey);
       
-      // Get processing jobs (visibility timeout not expired)
-      const processingKeys = await this.redisClient.keys(`${this.visibilityPrefix}*`);
-      const processingCount = processingKeys.length;
-      
-      // Get backlog estimate
-      const backlogLimit = 5000; // This should be configurable
+      // Get processing jobs estimate (simplified for CRUD)
+      const processingCount = 0; 
       
       return {
-        queue_name: queueName,
+        tenant_id: tenantId,
         size: queueSize,
         processing: processingCount,
-        backlog: Math.max(0, queueSize - processingCount),
-        backlog_limit: backlogLimit,
-        is_overloaded: queueSize > backlogLimit
+        backlog: queueSize,
+        backlog_limit: 5000,
+        is_overloaded: queueSize > 5000
       };
     } catch (error) {
       logger.error({ error: error.message, queueName }, 'Failed to get queue status');
