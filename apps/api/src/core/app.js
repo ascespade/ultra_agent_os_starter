@@ -1,7 +1,9 @@
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
-const path = require("path");
+
+// Services
+const { createUIStaticMiddleware } = require("../services/ui.service");
 
 // Routes
 const authRoutes = require("../routes/auth.routes");
@@ -25,25 +27,31 @@ function createApp() {
     next();
   });
 
-  // UI Static Serving (Phase 1 Requirement: Separate Layer)
-  // Ideally this should be Nginx, but for Node monolithic serving:
-  const UI_ENABLED = process.env.UI_ENABLED !== "false";
-  const UI_PATH = process.env.UI_PATH || "/ui";
-  
-  if (UI_ENABLED) {
-    const uiBuildPath = path.join(__dirname, "../../../../ui/dist");
-    app.use(UI_PATH, express.static(uiBuildPath));
-    console.log(`[UI] Serving static files at ${UI_PATH}`);
-  }
+  // UI Static Serving - Separated Layer (Phase 1 Requirement)
+  app.use(createUIStaticMiddleware());
 
   // API Routes
   app.use("/health", healthRoutes); // Root health
+  
+  // Root endpoint for API validation
+  app.get("/", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      service: "Ultra Agent API",
+      version: "1.0.0",
+      timestamp: new Date().toISOString()
+    });
+  });
+  
   app.use("/api/auth", authRoutes);
   app.use("/api/chat", jobsRoutes); // Main chat endpoint
   app.use("/api/jobs", jobsRoutes); // Job management
   app.use("/api/memory", memoryRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/adapters", adapterRoutes);
+  
+  // Workspace endpoint (Phase 4 requirement)
+  app.use("/api/workspace", memoryRoutes);
 
   // 404 Handler
   app.use((req, res) => {

@@ -1,3 +1,6 @@
+// Load environment variables first
+require('dotenv').config({ path: require('path').join(__dirname, '../../../.env') });
+
 // Production environment validation
 const { validateProductionEnv } = require("../../../lib/production-env-validator");
 validateProductionEnv();

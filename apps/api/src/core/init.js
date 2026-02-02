@@ -1,6 +1,5 @@
 const bcrypt = require("bcryptjs");
 const dbConnector = require("../../../../lib/db-connector");
-const crypto = require("crypto");
 
 async function initializeDefaultUser() {
   const db = dbConnector.getPool();
@@ -13,8 +12,15 @@ async function initializeDefaultUser() {
 
     if (result.rows.length === 0) {
       const envPassword = process.env.DEFAULT_ADMIN_PASSWORD;
-      const password = envPassword || crypto.randomBytes(16).toString("hex");
-      const hash = await bcrypt.hash(password, 10);
+      
+      // Phase 3: Fail fast if no admin password is provided
+      if (!envPassword) {
+        console.error("[SECURITY] DEFAULT_ADMIN_PASSWORD is required");
+        console.error("[SECURITY] Set environment variable or run: node scripts/setup-env.js");
+        throw new Error("DEFAULT_ADMIN_PASSWORD environment variable is required");
+      }
+      
+      const hash = await bcrypt.hash(envPassword, 10);
 
       await db.query(
         "INSERT INTO users (username, password_hash, tenant_id, role) VALUES ($1, $2, $3, $4)",
@@ -22,14 +28,13 @@ async function initializeDefaultUser() {
       );
 
       console.log("[SECURITY] Admin user created.");
-      if (!envPassword) {
-        console.log(`[SECURITY] Generated Password: ${password}`);
-        console.log("[SECURITY] Please set DEFAULT_ADMIN_PASSWORD in env.");
-      }
     }
   } catch (error) {
     console.error("[SECURITY] Failed to initialize default user:", error);
-    // Don't exit, just log
+    // In Phase 3, we should fail fast on security issues
+    if (error.message.includes("DEFAULT_ADMIN_PASSWORD")) {
+      process.exit(1);
+    }
   }
 }
 

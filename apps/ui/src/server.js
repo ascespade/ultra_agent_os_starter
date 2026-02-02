@@ -21,20 +21,19 @@ if (!API_URL) {
 
 // Serve static files with API URL injection
 app.get('/', (req, res) => {
-  // Check if admin control plane is requested
-  if (req.headers['user-agent']?.includes('admin') || req.query.admin === 'true') {
-    res.sendFile(path.join(__dirname, 'index_admin.html'));
-  } else {
-    res.sendFile(path.join(__dirname, 'index.html'));
-  }
+  // Always serve the unified dashboard
+  res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
-// Serve settings page
+// Legacy routes for backward compatibility
+app.get('/admin', (req, res) => {
+  res.redirect('/?admin=true');
+});
+
 app.get('/settings', (req, res) => {
   res.sendFile(path.join(__dirname, 'settings.html'));
 });
 
-// Serve API test studio
 app.get('/test-api', (req, res) => {
   res.sendFile(path.join(__dirname, 'test-api.html'));
 });

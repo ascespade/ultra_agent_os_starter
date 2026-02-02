@@ -12,7 +12,7 @@
  *   node scripts/reconcile-jobs.js --execute --force  # Fix all stuck jobs regardless of age
  */
 
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config();
 const { Pool } = require('pg');
 const redis = require('redis');
 

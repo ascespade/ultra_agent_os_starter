@@ -9,5 +9,6 @@ router.use(authenticateToken);
 
 router.post('/:filename', validateFilename, memoryController.writeMemory);
 router.get('/:filename', validateFilename, memoryController.readMemory);
+router.get('/', memoryController.getWorkspace);
 
 module.exports = router;

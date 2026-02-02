@@ -1,9 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const dbConnector = require("../../../../lib/db-connector");
-const { redisClient } = require("../services/redis.service"); // This needs to be created or passed
-// For now, assume redisClient is available globally or we fix imports later.
-// Actually, it's better to verify where redisClient comes from.
-// In server.js it is instantiated. We should move Redis to a service.
+const { getClient } = require("../services/redis.service");
+const { enforceBacklogLimit } = require("../services/job-reconcile.service");
 
 async function createJob(req, res) {
   const { message } = req.body;
@@ -15,9 +13,13 @@ async function createJob(req, res) {
   const queueKey = `tenant:${tenantId}:job_queue`;
 
   try {
-    // We need to access redisClient. Using global or require logic.
-    // Assuming we will move redisClient to a singleton service.
-    const redis = require('../services/redis.service').getClient();
+    const redis = getClient();
+    
+    // Enforce backlog limit before creating new job
+    const removedCount = await enforceBacklogLimit(tenantId, MAX_BACKLOG);
+    if (removedCount > 0) {
+      console.log(`[JOBS] Removed ${removedCount} old jobs to enforce backlog limit`);
+    }
     
     const backlogSize = await redis.lLen(queueKey);
     if (backlogSize >= MAX_BACKLOG) {
@@ -99,7 +101,7 @@ async function getJobStatus(req, res) {
 
   try {
     // Try Redis first (faster)
-    const redis = require('../services/redis.service').getClient();
+    const redis = getClient();
     const jobKey = `tenant:${tenantId}:job:${jobId}`;
     const cachedJob = await redis.hGet(jobKey, 'data');
 

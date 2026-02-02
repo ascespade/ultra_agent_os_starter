@@ -1,4 +1,5 @@
 {
   "api": 3003,
-  "websocket": 4200
+  "websocket": 4200,
+  "ui": 4000
 }
