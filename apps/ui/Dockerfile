@@ -1,3 +1,4 @@
+# UI Dockerfile - Pure static frontend service
 FROM node:18-alpine AS builder
 
 WORKDIR /app
