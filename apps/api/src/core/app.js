@@ -10,6 +10,7 @@ const adminRoutes = require("../routes/admin.routes");
 const adapterRoutes = require("../routes/adapter.routes");
 const healthRoutes = require("../routes/health.routes");
 const metricsRoutes = require("../routes/metrics.routes");
+const testDataRoutes = require("../routes/test-data.routes");
 
 function createApp() {
   const app = express();
@@ -49,6 +50,7 @@ function createApp() {
   app.use("/api/admin", adminRoutes);
   app.use("/api/adapters", adapterRoutes);
   app.use("/api/metrics", metricsRoutes); // System metrics
+  app.use("/api/test-data", testDataRoutes); // Test data management
   app.use("/health", healthRoutes);
 
   // Metrics endpoint

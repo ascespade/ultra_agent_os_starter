@@ -121,32 +121,154 @@ router.get('/performance', async (req, res) => {
   try {
     const jobService = require('../services/job.service');
     
-    // Get job statistics
-    const jobStats = await jobService.getJobStats('system');
+    // Get real job statistics from database
+    const db = require('../../../lib/db-connector').getPool();
     
-    // Calculate performance metrics
+    // Get job counts by status
+    const jobStats = await db.query(`
+      SELECT 
+        status,
+        COUNT(*) as count,
+        AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000) as avg_duration_ms
+      FROM jobs 
+      WHERE created_at > NOW() - INTERVAL '24 hours'
+      GROUP BY status
+    `);
+    
+    // Get total jobs and success rate
+    const totalStats = await db.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'completed') as completed,
+        COUNT(*) FILTER (WHERE status = 'failed') as failed,
+        COUNT(*) FILTER (WHERE status = 'active') as active,
+        COUNT(*) FILTER (WHERE status = 'pending') as pending
+      FROM jobs
+    `);
+    
+    // Get queue length from Redis
+    const redis = require('redis');
+    const client = redis.createClient({ url: process.env.REDIS_URL });
+    await client.connect();
+    
+    let queueLength = 0;
+    try {
+      queueLength = await client.lLen('jobs:queue');
+    } catch (error) {
+      logger.warn('Redis queue length check failed:', error.message);
+    }
+    await client.disconnect();
+    
+    const total = totalStats.rows[0];
+    const successRate = total.total > 0 ? ((total.completed / total.total) * 100).toFixed(2) : 0;
+    const avgProcessingTime = jobStats.rows.find(s => s.status === 'completed')?.avg_duration_ms || 0;
+    
+    // Calculate throughput (jobs per minute in last hour)
+    const throughputStats = await db.query(`
+      SELECT COUNT(*) as jobs_last_hour
+      FROM jobs 
+      WHERE created_at > NOW() - INTERVAL '1 hour'
+    `);
+    const throughput = throughputStats.rows[0].jobs_last_hour / 60; // jobs per minute
+    
     const metrics = {
       timestamp: new Date().toISOString(),
       jobs: {
-        total: jobStats.total || 0,
-        completed: jobStats.completed || 0,
-        failed: jobStats.failed || 0,
-        active: jobStats.active || 0,
-        pending: jobStats.pending || 0,
-        successRate: jobStats.total > 0 ? ((jobStats.completed / jobStats.total) * 100).toFixed(2) : 0,
-        avgProcessingTime: jobStats.avgProcessingTime || 0
+        total: parseInt(total.total) || 0,
+        completed: parseInt(total.completed) || 0,
+        failed: parseInt(total.failed) || 0,
+        active: parseInt(total.active) || 0,
+        pending: parseInt(total.pending) || 0,
+        successRate: parseFloat(successRate),
+        avgProcessingTime: Math.round(avgProcessingTime)
       },
       performance: {
-        throughput: jobStats.throughput || 0, // jobs per minute
-        errorRate: jobStats.total > 0 ? ((jobStats.failed / jobStats.total) * 100).toFixed(2) : 0,
-        avgQueueTime: jobStats.avgQueueTime || 0
+        throughput: Math.round(throughput * 100) / 100, // jobs per minute
+        errorRate: total.total > 0 ? ((total.failed / total.total) * 100).toFixed(2) : 0,
+        avgQueueTime: 0, // Would need queue timestamp tracking
+        queueLength: queueLength
+      },
+      realTime: {
+        activeJobs: parseInt(total.active) || 0,
+        queueLength: queueLength,
+        failedJobs: parseInt(total.failed) || 0
       }
     };
 
-    logger.debug('Performance metrics retrieved');
+    logger.debug('Performance metrics retrieved from database');
     res.json(metrics);
   } catch (error) {
     logger.error({ error: error.message }, 'Failed to get performance metrics');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Real queue status endpoint
+router.get('/queue-status', async (req, res) => {
+  try {
+    const redis = require('redis');
+    const client = redis.createClient({ url: process.env.REDIS_URL });
+    await client.connect();
+    
+    // Get real queue metrics
+    const queueLength = await client.lLen('jobs:queue');
+    const processingQueue = await client.lLen('jobs:processing');
+    const failedQueue = await client.lLen('jobs:failed');
+    
+    // Get queue info
+    const queueInfo = await client.info('memory');
+    
+    await client.disconnect();
+    
+    // Get database job stats for comparison
+    const db = require('../../../lib/db-connector').getPool();
+    const dbStats = await db.query(`
+      SELECT 
+        status,
+        COUNT(*) as count
+      FROM jobs 
+      WHERE created_at > NOW() - INTERVAL '1 hour'
+      GROUP BY status
+    `);
+    
+    const queues = [
+      {
+        name: 'jobs:queue',
+        length: queueLength,
+        processing: processingQueue,
+        failed: failedQueue,
+        status: queueLength > 100 ? 'warning' : queueLength > 50 ? 'info' : 'success'
+      },
+      {
+        name: 'jobs:processing',
+        length: processingQueue,
+        processing: processingQueue,
+        failed: 0,
+        status: 'info'
+      },
+      {
+        name: 'jobs:failed',
+        length: failedQueue,
+        processing: 0,
+        failed: failedQueue,
+        status: failedQueue > 10 ? 'error' : failedQueue > 5 ? 'warning' : 'info'
+      }
+    ];
+    
+    const metrics = {
+      timestamp: new Date().toISOString(),
+      length: queueLength,
+      processing: processingQueue,
+      failed: failedQueue,
+      queues: queues,
+      database: dbStats.rows,
+      status: queueLength > 100 ? 'warning' : 'healthy'
+    };
+
+    logger.debug('Real queue status retrieved');
+    res.json(metrics);
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to get queue status');
     res.status(500).json({ error: 'Internal server error' });
   }
 });

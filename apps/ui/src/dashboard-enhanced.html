@@ -865,43 +865,70 @@ class ProfessionalOpsDashboard {
 
   async loadSystemMetrics() {
     try {
-      const response = await fetch(`${this.apiBase}/api/jobs/stats`);
+      const response = await fetch(`${this.apiBase}/api/metrics/performance`);
       if (response.ok) {
-        const stats = await response.json();
-        this.updateMetrics(stats);
+        const data = await response.json();
+        this.updateRealMetrics(data);
+      } else {
+        console.error('[DASHBOARD] Failed to load system metrics:', response.status);
+        this.showMetricsError();
       }
     } catch (error) {
       console.error('[DASHBOARD] Failed to load system metrics:', error);
+      this.showMetricsError();
     }
   }
 
-  updateMetrics(stats) {
-    // Update active jobs
-    const activeJobs = stats.active || 0;
+  updateRealMetrics(data) {
+    // Update active jobs with real data
+    const activeJobs = data.realTime?.activeJobs || data.jobs?.active || 0;
     document.getElementById('activeJobsValue').textContent = activeJobs;
     this.updateJobChange('jobsChange', activeJobs);
     
-    // Update queue length
-    const queueLength = stats.queueLength || 0;
+    // Update queue length with real data
+    const queueLength = data.realTime?.queueLength || data.performance?.queueLength || 0;
     document.getElementById('queueLengthValue').textContent = queueLength;
     this.updateJobChange('queueChange', queueLength);
     
-    // Update failed jobs
-    const failedJobs = stats.failed || 0;
+    // Update failed jobs with real data
+    const failedJobs = data.realTime?.failedJobs || data.jobs?.failed || 0;
     document.getElementById('failedJobsValue').textContent = failedJobs;
     this.updateJobChange('failedChange', failedJobs, true);
     
-    // Update total jobs
-    const totalJobs = stats.total || 0;
+    // Update total jobs with real data
+    const totalJobs = data.jobs?.total || 0;
     document.getElementById('totalJobsValue').textContent = totalJobs.toLocaleString();
     
-    // Update success rate
-    const successRate = stats.successRate || 0;
+    // Update success rate with real data
+    const successRate = data.jobs?.successRate || 0;
     document.getElementById('successRateValue').textContent = `${successRate}%`;
     
-    // Update average processing time
-    const avgTime = stats.avgProcessingTime || 0;
-    document.getElementById('avgProcessingTime').textContent = `${avgTime}ms`;
+    // Update average processing time with real data
+    const avgTime = data.jobs?.avgProcessingTime || 0;
+    document.getElementById('avgProcessingTime').textContent = avgTime > 0 ? `${Math.round(avgTime)}ms` : '--';
+    
+    // Update throughput with real data
+    const throughput = data.performance?.throughput || 0;
+    if (document.getElementById('throughputValue')) {
+      document.getElementById('throughputValue').textContent = `${throughput}/min`;
+    }
+    
+    console.log('[DASHBOARD] Real metrics updated:', data);
+  }
+
+  showMetricsError() {
+    // Show error state for metrics
+    document.getElementById('activeJobsValue').textContent = 'Error';
+    document.getElementById('queueLengthValue').textContent = 'Error';
+    document.getElementById('failedJobsValue').textContent = 'Error';
+    document.getElementById('totalJobsValue').textContent = 'Error';
+    document.getElementById('successRateValue').textContent = 'Error';
+    document.getElementById('avgProcessingTime').textContent = 'Error';
+    
+    // Show notification
+    if (window.notificationSystem) {
+      window.notificationSystem.notify('Failed to load real system metrics', 'error');
+    }
   }
 
   updateJobChange(elementId, value, isError = false) {
@@ -958,19 +985,21 @@ class ProfessionalOpsDashboard {
 
   async loadQueueInfo() {
     try {
-      const response = await fetch(`${this.apiBase}/api/queue/status`);
+      const response = await fetch(`${this.apiBase}/api/metrics/queue-status`);
       if (response.ok) {
         const data = await response.json();
-        this.updateQueueTable(data.queues || []);
+        this.updateRealQueueTable(data.queues || []);
+      } else {
+        console.error('[DASHBOARD] Failed to load queue info:', response.status);
+        this.showQueueError();
       }
     } catch (error) {
       console.error('[DASHBOARD] Failed to load queue info:', error);
-      document.getElementById('queueTable').innerHTML = 
-        '<tr><td colspan="6">Failed to load queue information</td></tr>';
+      this.showQueueError();
     }
   }
 
-  updateQueueTable(queues) {
+  updateRealQueueTable(queues) {
     const tbody = document.getElementById('queueTable');
     
     if (queues.length === 0) {
@@ -995,6 +1024,15 @@ class ProfessionalOpsDashboard {
         </td>
       </tr>
     `).join('');
+  }
+
+  showQueueError() {
+    const tbody = document.getElementById('queueTable');
+    tbody.innerHTML = '<tr><td colspan="6">Failed to load queue information</td></tr>';
+    
+    if (window.notificationSystem) {
+      window.notificationSystem.notify('Failed to load real queue data', 'error');
+    }
   }
 
   async loadJobHistory() {
