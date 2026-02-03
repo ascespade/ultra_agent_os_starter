@@ -3,8 +3,7 @@ const helmet = require("helmet");
 const cors = require("cors");
 const path = require("path");
 
-// Routes
-const authRoutes = require("../routes/auth.routes");
+// Routes - Ops Only
 const jobsRoutes = require("../routes/jobs.routes");
 const memoryRoutes = require("../routes/memory-v2.routes");
 const adminRoutes = require("../routes/admin.routes");
@@ -43,9 +42,7 @@ function createApp() {
     });
   });
   
-  // API Routes
-  app.use("/api/auth", authRoutes);
-  app.use("/api/chat", jobsRoutes); // Main chat endpoint
+  // API Routes - Ops Only
   app.use("/api/jobs", jobsRoutes); // Job management
   app.use("/api/memory", memoryRoutes);
   app.use("/api/admin", adminRoutes);

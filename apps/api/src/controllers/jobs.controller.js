@@ -7,23 +7,22 @@ const logger = pino({
 });
 
 async function createJob(req, res) {
-  const { message, type = 'chat', metadata = {}, tags = [], options = {} } = req.body;
-  const tenantId = req.tenantId;
+  const { message, type = 'system', metadata = {}, tags = [], options = {} } = req.body;
 
   try {
     const result = await jobService.createJob(
-      tenantId,
-      req.user.userId,
+      'system', // Fixed tenant ID for Ops
+      'system', // Fixed user ID for Ops
       type,
       { message },
       { metadata, tags, ...options }
     );
 
-    logger.info({ tenantId, userId: req.user.userId, jobId: result.jobId, type }, 'Job created successfully');
+    logger.info({ jobId: result.jobId, type }, 'Ops job created successfully');
 
     res.json(result);
   } catch (error) {
-    logger.error({ error: error.message, tenantId }, 'Job creation failed');
+    logger.error({ error: error.message }, 'Ops job creation failed');
     res.status(500).json({ 
       error: "Internal server error",
       message: "Job creation failed"
@@ -32,11 +31,10 @@ async function createJob(req, res) {
 }
 
 async function listJobs(req, res) {
-  const tenantId = req.tenantId;
   const { status, type, limit = 20, page = 1, sortBy = 'created_at', sortOrder = 'DESC', queueName } = req.query;
 
   try {
-    const result = await jobService.listJobs(tenantId, req.user.userId, {
+    const result = await jobService.listJobs('system', 'system', {
       status,
       type,
       limit: parseInt(limit),
@@ -46,21 +44,20 @@ async function listJobs(req, res) {
       queueName
     });
 
-    logger.debug({ tenantId, userId: req.user.userId }, 'Jobs listed successfully');
+    logger.debug('Ops jobs listed successfully');
 
     res.json(result);
   } catch (error) {
-    logger.error({ error: error.message, tenantId }, 'Job listing failed');
+    logger.error({ error: error.message }, 'Ops jobs listing failed');
     res.status(500).json({ 
       error: "Internal server error",
-      message: "Job listing failed"
+      message: "Jobs listing failed"
     });
   }
 }
 
 async function getJobStatus(req, res) {
   const { jobId } = req.params;
-  const tenantId = req.tenantId;
 
   try {
     const job = await jobService.getJob(jobId);
@@ -72,19 +69,12 @@ async function getJobStatus(req, res) {
       });
     }
 
-    // Check if user has access to this job
-    if (job.tenant_id !== tenantId || job.user_id !== req.user.userId) {
-      return res.status(403).json({
-        error: "Forbidden",
-        message: "Access denied"
-      });
-    }
-
-    logger.debug({ tenantId, userId: req.user.userId, jobId }, 'Job status retrieved successfully');
+    // Ops access - no user restrictions
+    logger.debug({ jobId }, 'Ops job status retrieved successfully');
 
     res.json(job);
   } catch (error) {
-    logger.error({ error: error.message, jobId, tenantId }, 'Job status retrieval failed');
+    logger.error({ error: error.message, jobId }, 'Ops job status retrieval failed');
     res.status(500).json({ 
       error: "Internal server error",
       message: "Job status retrieval failed"
@@ -93,16 +83,14 @@ async function getJobStatus(req, res) {
 }
 
 async function getJobStats(req, res) {
-  const tenantId = req.tenantId;
-
   try {
-    const stats = await jobService.getJobStats(tenantId, req.user.userId);
+    const stats = await jobService.getJobStats('system');
 
-    logger.debug({ tenantId, userId: req.user.userId }, 'Job stats retrieved successfully');
+    logger.debug('Ops job stats retrieved successfully');
 
     res.json(stats);
   } catch (error) {
-    logger.error({ error: error.message, tenantId }, 'Job stats retrieval failed');
+    logger.error({ error: error.message }, 'Ops job stats retrieval failed');
     res.status(500).json({ 
       error: "Internal server error",
       message: "Job stats retrieval failed"
@@ -116,11 +104,11 @@ async function getQueueStatus(req, res) {
   try {
     const status = await jobService.getQueueStatus(queueName);
 
-    logger.debug({ queueName }, 'Queue status retrieved successfully');
+    logger.debug({ queueName }, 'Ops queue status retrieved successfully');
 
     res.json(status);
   } catch (error) {
-    logger.error({ error: error.message, queueName }, 'Queue status retrieval failed');
+    logger.error({ error: error.message, queueName }, 'Ops queue status retrieval failed');
     res.status(500).json({ 
       error: "Internal server error",
       message: "Queue status retrieval failed"
@@ -129,27 +117,23 @@ async function getQueueStatus(req, res) {
 }
 
 async function applyRetentionPolicy(req, res) {
-  const tenantId = req.tenantId;
   const { type, days, max_size_bytes, tags, dry_run = true } = req.body;
 
   try {
-    const policy = { type };
-    
-    if (type === 'age') {
-      policy.days = days;
-    } else if (type === 'size') {
-      policy.max_size_bytes = max_size_bytes;
-    } else if (type === 'tags') {
-      policy.tags = tags;
-    }
+    const result = await jobService.applyRetentionPolicy('system', {
+      type,
+      days,
+      max_size_bytes,
+      tags,
+      dry_run
+    });
 
-    const result = await jobService.applyRetentionPolicy(policy, dry_run);
+    logger.info({ type, dry_run }, 'Ops retention policy applied successfully');
 
-    logger.info({ tenantId, userId: req.user.userId, policy, dry_run }, 'Retention policy applied');
 
     res.json(result);
   } catch (error) {
-    logger.error({ error: error.message, tenantId }, 'Retention policy application failed');
+    logger.error({ error: error.message }, 'Ops retention policy application failed');
     res.status(500).json({ 
       error: "Internal server error",
       message: "Retention policy application failed"
@@ -158,22 +142,20 @@ async function applyRetentionPolicy(req, res) {
 }
 
 async function reconcileDeadLetterJobs(req, res) {
-  const tenantId = req.tenantId;
   const { max_age_days = 7, batch_size = 100, dry_run = false } = req.body;
 
   try {
-    // This would be implemented in the worker service
-    const result = {
-      dry_run,
-      affected_jobs: 0,
-      message: "Dead letter reconciliation would be handled by worker service"
-    };
+    const result = await jobService.reconcileDeadLetterJobs('system', {
+      max_age_days,
+      batch_size,
+      dry_run
+    });
 
-    logger.info({ tenantId, userId: req.user.userId, max_age_days, batch_size, dry_run }, 'Dead letter reconciliation requested');
+    logger.info({ max_age_days, batch_size, dry_run }, 'Ops dead letter reconciliation completed');
 
     res.json(result);
   } catch (error) {
-    logger.error({ error: error.message, tenantId }, 'Dead letter reconciliation failed');
+    logger.error({ error: error.message }, 'Ops dead letter reconciliation failed');
     res.status(500).json({ 
       error: "Internal server error",
       message: "Dead letter reconciliation failed"

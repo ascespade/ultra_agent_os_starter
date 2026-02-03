@@ -1,11 +1,10 @@
 const express = require('express');
 const adapterController = require('../controllers/adapter.controller');
-const { authenticateToken } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validateZod');
 
 const router = express.Router();
 
-router.use(authenticateToken);
+// Ops adapter routes - no authentication required
 
 // Routes with Zod validation
 router.get('/status', adapterController.getStatus);

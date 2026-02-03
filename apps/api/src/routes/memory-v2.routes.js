@@ -1,10 +1,9 @@
 const express = require('express');
 const memoryController = require('../controllers/memory-v2.controller');
-const { authenticateToken } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
-router.use(authenticateToken);
+// Ops memory routes - no authentication required
 
 // Workspace endpoint must come before parametric routes
 router.get('/workspace', memoryController.getWorkspace);

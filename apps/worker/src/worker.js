@@ -172,7 +172,7 @@ async function callLLM(prompt, context = {}) {
   const operation = async () => {
     const response = await axios.post(`${OLLAMA_URL}/api/generate`, {
       model: 'llama3.2',
-      prompt: `Context: ${JSON.stringify(context)}\n\nUser: ${prompt}\n\nAssistant:`,
+      prompt: `Context: ${JSON.stringify(context)}\n\nSystem Task: ${prompt}\n\nResponse:`,
       stream: false,
       options: {
         temperature: 0.1,
@@ -206,7 +206,7 @@ async function callLLM(prompt, context = {}) {
 // Core Intent Analysis (with optional LLM enhancement)
 async function analyzeIntent(message) {
   // Try LLM adapter first
-  const llmResult = await callLLM(`Analyze user intent: ${message}`);
+  const llmResult = await callLLM(`Analyze system task: ${message}`);
   
   if (llmResult) {
     console.log('[ADAPTER] Using LLM-enhanced intent analysis');
