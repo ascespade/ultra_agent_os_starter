@@ -1,0 +1,1 @@
+{"name": "ultra-agent-core", "version": "1.0.0", "description": "Ultra Agent OS - Core Backend Services Only", "scripts": {"start": "echo \"Core backend services - use individual service start scripts\""}}
