@@ -30,7 +30,7 @@
     {
       "name": "ultra-agent-ui",
       "source": ".",
-      "dockerfilePath": "apps/ui/Dockerfile.static",
+      "dockerfilePath": "apps/ui/Dockerfile",
       "healthcheck": {
         "path": "/health",
         "interval": 30,
