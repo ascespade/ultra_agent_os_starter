@@ -1,1 +1,0 @@
-{"name": "ultra-agent-backend-only", "version": "1.0.0", "description": "Ultra Agent OS - Backend Services Only", "scripts": {"start": "echo \"Backend services only - use railway.json for deployment\""}}
