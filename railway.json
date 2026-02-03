@@ -1,6 +1,6 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "name": "ultra-agent-core-blueprint-v2",
+  "name": "ultra-agent-core-backend-only",
   "description": "Ultra Agent OS – Core Blueprint with API, UI, Worker, PostgreSQL and Redis",
   "build": {
     "builder": "DOCKERFILE"
