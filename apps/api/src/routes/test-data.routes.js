@@ -11,7 +11,7 @@ const logger = pino({
 // Create test jobs for real data testing
 router.post('/create-test-jobs', async (req, res) => {
   try {
-    const db = require('../../../lib/db-connector').getPool();
+    const db = require('../../../../lib/db-connector').getPool();
     const redis = require('redis');
     const client = redis.createClient({ url: process.env.REDIS_URL });
     
@@ -90,7 +90,7 @@ router.post('/create-test-jobs', async (req, res) => {
 // Clear test data
 router.delete('/clear-test-data', async (req, res) => {
   try {
-    const db = require('../../../lib/db-connector').getPool();
+    const db = require('../../../../lib/db-connector').getPool();
     const redis = require('redis');
     const client = redis.createClient({ url: process.env.REDIS_URL });
     
@@ -126,7 +126,7 @@ router.delete('/clear-test-data', async (req, res) => {
 // Get current test data status
 router.get('/test-data-status', async (req, res) => {
   try {
-    const db = require('../../../lib/db-connector').getPool();
+    const db = require('../../../../lib/db-connector').getPool();
     const redis = require('redis');
     const client = redis.createClient({ url: process.env.REDIS_URL });
     

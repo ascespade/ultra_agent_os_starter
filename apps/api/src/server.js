@@ -28,9 +28,20 @@ console.log('[RAILWAY_ENV_VALIDATION] ✓ All environment variables resolved');
 console.log('[RAILWAY_ENV_VALIDATION] DATABASE_URL type:', typeof process.env.DATABASE_URL);
 console.log('[RAILWAY_ENV_VALIDATION] REDIS_URL type:', typeof process.env.REDIS_URL);
 
-// Production environment validation
-const { validateProductionEnv } = require("../../../lib/production-env-validator");
-validateProductionEnv();
+// Production environment validation and dotenv handling
+const { validateProductionEnv, getEnvironmentProfile } = require('../../../lib/production-env-validator');
+
+// Allow localhost for local development
+const isLocalDevelopment = process.env.NODE_ENV !== 'production' || 
+  (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost')) ||
+  (process.env.REDIS_URL && process.env.REDIS_URL.includes('localhost'));
+
+if (!isLocalDevelopment) {
+  // Perform strict production environment validation
+  validateProductionEnv();
+} else {
+  console.log('[LOCAL_DEV] Local development detected - skipping production validation');
+}
 
 const http = require("http");
 const { createApp } = require("./core/app");

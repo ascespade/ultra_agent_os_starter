@@ -1,10 +1,21 @@
 const bcrypt = require("bcryptjs");
 const dbConnector = require("../../../../lib/db-connector");
 
+// Initialize default user for development
 async function initializeDefaultUser() {
-  const db = dbConnector.getPool();
-
   try {
+    // Skip user initialization in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[INIT] Skipping default user initialization in development');
+      return;
+    }
+
+    if (!process.env.DEFAULT_ADMIN_PASSWORD) {
+      throw new Error('DEFAULT_ADMIN_PASSWORD environment variable is required');
+    }
+
+    const db = dbConnector.getPool();
+
     const result = await db.query(
       "SELECT id FROM users WHERE username = $1",
       ["admin"]
@@ -12,14 +23,6 @@ async function initializeDefaultUser() {
 
     if (result.rows.length === 0) {
       const envPassword = process.env.DEFAULT_ADMIN_PASSWORD;
-      
-      // Phase 3: Fail fast if no admin password is provided
-      if (!envPassword) {
-        console.error("[SECURITY] DEFAULT_ADMIN_PASSWORD is required");
-        console.error("[SECURITY] Set environment variable or run: node scripts/setup-env.js");
-        throw new Error("DEFAULT_ADMIN_PASSWORD environment variable is required");
-      }
-      
       const hash = await bcrypt.hash(envPassword, 10);
 
       await db.query(

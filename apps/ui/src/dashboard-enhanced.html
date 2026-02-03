@@ -828,9 +828,9 @@ body {
 <script>
 class ProfessionalOpsDashboard {
   constructor() {
-    this.apiBase = window.location.hostname === 'localhost' 
-      ? 'http://localhost:8080' 
-      : 'https://ultra-agent-api-production.up.railway.app';
+    this.apiBase = window.location.hostname === 'localhost' || window.location.hostname.includes('railway.app') 
+      ? window.location.origin + '/api'  // Use proxied API when on Railway
+      : 'https://ultra-agent-api-production.up.railway.app';  // Use direct API otherwise
     
     this.refreshInterval = 30000; // 30 seconds
     this.isApiAvailable = false;

@@ -31,7 +31,7 @@ router.get('/system', async (req, res) => {
 // Database metrics endpoint
 router.get('/database', async (req, res) => {
   try {
-    const dbConnector = require('../../../lib/db-connector');
+    const dbConnector = require('../../../../lib/db-connector');
     const db = dbConnector.getPool();
     
     // Get database stats
@@ -122,7 +122,7 @@ router.get('/performance', async (req, res) => {
     const jobService = require('../services/job.service');
     
     // Get real job statistics from database
-    const db = require('../../../lib/db-connector').getPool();
+    const db = require('../../../../lib/db-connector').getPool();
     
     // Get job counts by status
     const jobStats = await db.query(`
@@ -221,7 +221,7 @@ router.get('/queue-status', async (req, res) => {
     await client.disconnect();
     
     // Get database job stats for comparison
-    const db = require('../../../lib/db-connector').getPool();
+    const db = require('../../../../lib/db-connector').getPool();
     const dbStats = await db.query(`
       SELECT 
         status,
@@ -295,7 +295,7 @@ router.get('/health-detailed', async (req, res) => {
 
     // Check database
     try {
-      const dbConnector = require('../../../lib/db-connector');
+      const dbConnector = require('../../../../lib/db-connector');
       const db = dbConnector.getPool();
       const dbStart = Date.now();
       await db.query('SELECT 1');
