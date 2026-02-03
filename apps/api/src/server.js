@@ -6,25 +6,8 @@ console.log('[RAILWAY_ENV_VALIDATION] NODE_ENV:', process.env.NODE_ENV);
 console.log('[RAILWAY_ENV_VALIDATION] JWT_SECRET present:', !!process.env.JWT_SECRET);
 console.log('[RAILWAY_ENV_VALIDATION] INTERNAL_API_KEY present:', !!process.env.INTERNAL_API_KEY);
 
-// Force Railway environment variables if missing (Railway injection workaround)
-if (!process.env.DATABASE_URL) {
-  // Try Railway service URLs first, then fallback to placeholder
-  process.env.DATABASE_URL = process.env.RAILWAY_DATABASE_URL || 
-                            process.env.POSTGRES_URL || 
-                            process.env.POSTGRES_PUBLIC_URL ||
-                            process.env.RAILWAY_POSTGRES_URL ||
-                            'postgresql://postgres:password@postgres:5432/railway';
-  console.log('[RAILWAY_ENV_VALIDATION] Forced DATABASE_URL from Railway variables');
-}
-
-if (!process.env.REDIS_URL) {
-  // Try Railway service URLs first, then fallback to placeholder
-  process.env.REDIS_URL = process.env.RAILWAY_REDIS_URL || 
-                        process.env.REDIS_CONNECTION_URL ||
-                        process.env.RAILWAY_REDIS_CONNECTION_URL ||
-                        'redis://redis:6379';
-  console.log('[RAILWAY_ENV_VALIDATION] Forced REDIS_URL from Railway variables');
-}
+// Railway provides DATABASE_URL and REDIS_URL automatically
+// Only generate secrets if missing
 
 if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = 'railway-jwt-secret-' + require('crypto').randomBytes(32).toString('hex');
