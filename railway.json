@@ -26,17 +26,6 @@
       "name": "ultra-agent-worker",
       "source": ".",
       "dockerfilePath": "apps/worker/Dockerfile"
-    },
-    {
-      "name": "ultra-agent-ui",
-      "source": ".",
-      "dockerfilePath": "apps/ui/Dockerfile",
-      "healthcheck": {
-        "path": "/health",
-        "interval": 30,
-        "timeout": 10,
-        "retries": 5
-      }
     }
   ],
   "databases": {
