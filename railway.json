@@ -25,7 +25,12 @@
     {
       "name": "ultra-agent-worker",
       "source": ".",
-      "dockerfilePath": "apps/worker/Dockerfile"
+      "dockerfilePath": "apps/worker/Dockerfile",
+      "env": {
+        "NODE_ENV": "production",
+        "WORKER_PORT": "3004",
+        "HOST": "0.0.0.0"
+      }
     }
   ],
   "databases": {

@@ -636,7 +636,7 @@ async function workerBootstrap() {
 async function workerLoop() {
   // Start Health Check Server
   const http = require('http');
-  const healthPort = process.env.PORT || 3004;
+  const healthPort = process.env.WORKER_PORT || 3004;
   const healthServer = http.createServer((req, res) => {
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });

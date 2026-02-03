@@ -9,6 +9,7 @@ const memoryRoutes = require("../routes/memory-v2.routes");
 const adminRoutes = require("../routes/admin.routes");
 const adapterRoutes = require("../routes/adapter.routes");
 const healthRoutes = require("../routes/health.routes");
+const metricsRoutes = require("../routes/metrics.routes");
 
 function createApp() {
   const app = express();
@@ -47,6 +48,8 @@ function createApp() {
   app.use("/api/memory", memoryRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/adapters", adapterRoutes);
+  app.use("/api/metrics", metricsRoutes); // System metrics
+  app.use("/health", healthRoutes);
 
   // Metrics endpoint
   app.get("/metrics", (req, res) => {

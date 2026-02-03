@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<script src="/env.js"></script>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Ultra Agent OS - Professional Ops Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>
+:root {
+  --primary: #0a1428;
+  --secondary: #1a2847;
+  --accent: #4a9eff;
+  --accent-dark: #3a7ee6;
+  --accent-muted: rgba(74, 158, 255, 0.15);
+  --success: #10b981;
+  --warning: #f97316;
+  --error: #ef4444;
+  --info: #3b82f6;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border: #475569;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --gradient-4: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+.dashboard-container {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 2rem 1.5rem;
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  margin-bottom: 3rem;
+  text-align: center;
+}
+
+.sidebar-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.sidebar-header p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-1);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: -1;
+}
+
+.nav-item:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  transform: translateX(4px);
+}
+
+.nav-item.active {
+  color: white;
+  background: var(--gradient-1);
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
+}
+
+.nav-item i {
+  width: 20px;
+  text-align: center;
+}
+
+/* Main Content */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.top-nav {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.page-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 2rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--error);
+  animation: pulse 2s infinite;
+}
+
+.status-dot.connected {
+  background: var(--success);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Content Area */
+.content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+.page {
+  display: none;
+}
+
+.page.active {
+  display: block;
+}
+
+/* Cards */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 6px var(--shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 12px var(--shadow);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.card-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* Grid Layout */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.metric-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-1);
+}
+
+.metric-card.success::before { background: var(--gradient-4); }
+.metric-card.warning::before { background: var(--gradient-2); }
+.metric-card.error::before { background: var(--gradient-3); }
+
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.metric-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.metric-change {
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.metric-change.positive { color: var(--success); }
+.metric-change.negative { color: var(--error); }
+
+/* Tables */
+.table-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: var(--bg-tertiary);
+  padding: 1rem 1.5rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.table td {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.table tr:hover {
+  background: var(--bg-tertiary);
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status-badge.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.status-badge.warning {
+  background: rgba(249, 115, 22, 0.1);
+  color: var(--warning);
+}
+
+.status-badge.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+.status-badge.info {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--info);
+}
+
+/* Progress Bars */
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--gradient-1);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* Charts */
+.chart-container {
+  height: 300px;
+  position: relative;
+  margin-top: 1rem;
+}
+
+/* Loading States */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.loading::after {
+  content: '';
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top: 2px solid var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-left: 0.5rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dashboard-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .sidebar {
+    display: none;
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Animations */
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
+</head>
+<body>
+<div class="dashboard-container">
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1><i class="fas fa-rocket"></i> Ultra Agent OS</h1>
+      <p>Professional Ops Dashboard</p>
+    </div>
+    
+    <nav class="nav-menu">
+      <a class="nav-item active" data-page="overview">
+        <i class="fas fa-tachometer-alt"></i> System Overview
+      </a>
+      <a class="nav-item" data-page="jobs">
+        <i class="fas fa-tasks"></i> Jobs & Queue
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Top Navigation -->
+    <header class="top-nav">
+      <h2 class="page-title" id="pageTitle">System Overview</h2>
+      <div class="connection-status">
+        <div class="status-indicator" id="apiStatus">
+          <span class="status-dot" id="apiStatusDot"></span>
+          <span id="apiStatusText">API: Checking...</span>
+        </div>
+        <div class="status-indicator" id="workerStatus">
+          <span class="status-dot" id="workerStatusDot"></span>
+          <span id="workerStatusText">Worker: Checking...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content Area -->
+    <div class="content">
+      <!-- Overview Page -->
+      <div class="page active" id="overview">
+        <!-- System Metrics -->
+        <div class="metrics-grid">
+          <div class="metric-card success">
+            <div class="metric-header">
+              <span class="metric-title">System Uptime</span>
+              <div class="metric-icon">
+                <i class="fas fa-clock"></i>
+              </div>
+            </div>
+            <div class="metric-value" id="uptimeValue">--</div>
+            <div class="metric-change positive">
+              <i class="fas fa-arrow-up"></i> Stable
+            </div>
+          </div>
+
+          <div class="metric-card info">
+            <div class="metric-header">
+              <span class="metric-title">Active Jobs</span>
+              <div class="metric-icon">
+                <i class="fas fa-play-circle"></i>
+              </div>
+            </div>
+            <div class="metric-value" id="activeJobsValue">--</div>
+            <div class="metric-change" id="jobsChange">
+              <i class="fas fa-minus"></i> Loading...
+            </div>
+          </div>
+
+          <div class="metric-card warning">
+            <div class="metric-header">
+              <span class="metric-title">Queue Length</span>
+              <div class="metric-icon">
+                <i class="fas fa-list-ol"></i>
+              </div>
+            </div>
+            <div class="metric-value" id="queueLengthValue">--</div>
+            <div class="metric-change" id="queueChange">
+              <i class="fas fa-minus"></i> Loading...
+            </div>
+          </div>
+
+          <div class="metric-card error">
+            <div class="metric-header">
+              <span class="metric-title">Failed Jobs</span>
+              <div class="metric-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+              </div>
+            </div>
+            <div class="metric-value" id="failedJobsValue">--</div>
+            <div class="metric-change negative" id="failedChange">
+              <i class="fas fa-arrow-up"></i> Critical
+            </div>
+          </div>
+        </div>
+
+        <!-- System Health -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="fas fa-heartbeat"></i> System Health
+            </h3>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">API Response Time</span>
+              </div>
+              <div class="metric-value" id="apiResponseTime">--</div>
+              <div class="metric-change positive">
+                <i class="fas fa-check"></i> Normal
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Database Status</span>
+              </div>
+              <div class="metric-value" id="dbStatus">--</div>
+              <div class="metric-change positive">
+                <i class="fas fa-check"></i> Connected
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Redis Status</span>
+              </div>
+              <div class="metric-value" id="redisStatus">--</div>
+              <div class="metric-change positive">
+                <i class="fas fa-check"></i> Connected
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="fas fa-history"></i> Recent Activity
+            </h3>
+          </div>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Job ID</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                </tr>
+              </thead>
+              <tbody id="recentActivity">
+                <tr>
+                  <td colspan="5" class="loading">Loading recent activity...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Jobs Page -->
+      <div class="page" id="jobs">
+        <!-- Job Statistics -->
+        <div class="metrics-grid">
+          <div class="metric-card success">
+            <div class="metric-header">
+              <span class="metric-title">Total Jobs</span>
+              <div class="metric-icon">
+                <i class="fas fa-database"></i>
+              </div>
+            </div>
+            <div class="metric-value" id="totalJobsValue">--</div>
+            <div class="metric-change positive">
+              <i class="fas fa-arrow-up"></i> All Time
+            </div>
+          </div>
+
+          <div class="metric-card info">
+            <div class="metric-header">
+              <span class="metric-title">Success Rate</span>
+              <div class="metric-icon">
+                <i class="fas fa-percentage"></i>
+              </div>
+            </div>
+            <div class="metric-value" id="successRateValue">--</div>
+            <div class="metric-change positive">
+              <i class="fas fa-check"></i> Healthy
+            </div>
+          </div>
+
+          <div class="metric-card warning">
+            <div class="metric-header">
+              <span class="metric-title">Avg Processing Time</span>
+              <div class="metric-icon">
+                <i class="fas fa-stopwatch"></i>
+              </div>
+            </div>
+            <div class="metric-value" id="avgProcessingTime">--</div>
+            <div class="metric-change positive">
+              <i class="fas fa-arrow-down"></i> Optimized
+            </div>
+          </div>
+        </div>
+
+        <!-- Queue Management -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="fas fa-cogs"></i> Queue Management
+            </h3>
+            <button onclick="refreshJobs()" style="padding: 0.5rem 1rem; background: var(--accent); color: white; border: none; border-radius: 0.5rem; cursor: pointer;">
+              <i class="fas fa-sync"></i> Refresh
+            </button>
+          </div>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Queue Name</th>
+                  <th>Length</th>
+                  <th>Processing</th>
+                  <th>Failed</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="queueTable">
+                <tr>
+                  <td colspan="6" class="loading">Loading queue information...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Job History -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="fas fa-list"></i> Recent Jobs
+            </h3>
+          </div>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Job ID</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Duration</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="jobsTable">
+                <tr>
+                  <td colspan="6" class="loading">Loading job history...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+class ProfessionalOpsDashboard {
+  constructor() {
+    this.apiBase = window.location.hostname === 'localhost' 
+      ? 'http://localhost:8080' 
+      : 'https://ultra-agent-api-production.up.railway.app';
+    
+    this.refreshInterval = 30000; // 30 seconds
+    this.metrics = {
+      uptime: 0,
+      activeJobs: 0,
+      queueLength: 0,
+      failedJobs: 0,
+      totalJobs: 0,
+      successRate: 0,
+      avgProcessingTime: 0
+    };
+    
+    this.init();
+  }
+
+  init() {
+    this.setupNavigation();
+    this.startHealthChecks();
+    this.loadData();
+    this.startAutoRefresh();
+    
+    console.log('[DASHBOARD] Professional Ops Dashboard initialized');
+  }
+
+  setupNavigation() {
+    const navItems = document.querySelectorAll('.nav-item');
+    const pages = document.querySelectorAll('.page');
+    const pageTitle = document.getElementById('pageTitle');
+
+    navItems.forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetPage = item.dataset.page;
+        
+        // Update navigation
+        navItems.forEach(nav => nav.classList.remove('active'));
+        item.classList.add('active');
+        
+        // Update page
+        pages.forEach(page => page.classList.remove('active'));
+        document.getElementById(targetPage).classList.add('active');
+        
+        // Update title
+        pageTitle.textContent = item.textContent.trim();
+        
+        // Load page-specific data
+        if (targetPage === 'jobs') {
+          this.loadJobsData();
+        }
+      });
+    });
+  }
+
+  async startHealthChecks() {
+    setInterval(async () => {
+      await this.checkAPIHealth();
+      await this.checkWorkerHealth();
+    }, 10000);
+    
+    // Initial checks
+    await this.checkAPIHealth();
+    await this.checkWorkerHealth();
+  }
+
+  async checkAPIHealth() {
+    try {
+      const startTime = Date.now();
+      const response = await fetch(`${this.apiBase}/health`);
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
+      
+      if (response.ok) {
+        const data = await response.json();
+        this.updateStatus('api', true, `API: ${responseTime}ms`);
+        document.getElementById('apiResponseTime').textContent = `${responseTime}ms`;
+        this.metrics.uptime = data.uptime || 0;
+        this.updateUptime();
+      } else {
+        this.updateStatus('api', false, 'API: Error');
+      }
+    } catch (error) {
+      this.updateStatus('api', false, 'API: Offline');
+      console.error('[DASHBOARD] API health check failed:', error);
+    }
+  }
+
+  async checkWorkerHealth() {
+    try {
+      const response = await fetch(`${this.apiBase}/worker/health`);
+      if (response.ok) {
+        this.updateStatus('worker', true, 'Worker: Active');
+      } else {
+        this.updateStatus('worker', false, 'Worker: Error');
+      }
+    } catch (error) {
+      this.updateStatus('worker', false, 'Worker: Offline');
+      console.error('[DASHBOARD] Worker health check failed:', error);
+    }
+  }
+
+  updateStatus(service, isOnline, text) {
+    const statusDot = document.getElementById(`${service}StatusDot`);
+    const statusText = document.getElementById(`${service}StatusText`);
+    
+    if (isOnline) {
+      statusDot.classList.add('connected');
+    } else {
+      statusDot.classList.remove('connected');
+    }
+    
+    statusText.textContent = text;
+  }
+
+  updateUptime() {
+    const uptimeElement = document.getElementById('uptimeValue');
+    if (this.metrics.uptime > 0) {
+      const hours = Math.floor(this.metrics.uptime / 3600);
+      const minutes = Math.floor((this.metrics.uptime % 3600) / 60);
+      uptimeElement.textContent = `${hours}h ${minutes}m`;
+    }
+  }
+
+  async loadData() {
+    await this.loadSystemMetrics();
+    await this.loadRecentActivity();
+  }
+
+  async loadSystemMetrics() {
+    try {
+      const response = await fetch(`${this.apiBase}/api/jobs/stats`);
+      if (response.ok) {
+        const stats = await response.json();
+        this.updateMetrics(stats);
+      }
+    } catch (error) {
+      console.error('[DASHBOARD] Failed to load system metrics:', error);
+    }
+  }
+
+  updateMetrics(stats) {
+    // Update active jobs
+    const activeJobs = stats.active || 0;
+    document.getElementById('activeJobsValue').textContent = activeJobs;
+    this.updateJobChange('jobsChange', activeJobs);
+    
+    // Update queue length
+    const queueLength = stats.queueLength || 0;
+    document.getElementById('queueLengthValue').textContent = queueLength;
+    this.updateJobChange('queueChange', queueLength);
+    
+    // Update failed jobs
+    const failedJobs = stats.failed || 0;
+    document.getElementById('failedJobsValue').textContent = failedJobs;
+    this.updateJobChange('failedChange', failedJobs, true);
+    
+    // Update total jobs
+    const totalJobs = stats.total || 0;
+    document.getElementById('totalJobsValue').textContent = totalJobs.toLocaleString();
+    
+    // Update success rate
+    const successRate = stats.successRate || 0;
+    document.getElementById('successRateValue').textContent = `${successRate}%`;
+    
+    // Update average processing time
+    const avgTime = stats.avgProcessingTime || 0;
+    document.getElementById('avgProcessingTime').textContent = `${avgTime}ms`;
+  }
+
+  updateJobChange(elementId, value, isError = false) {
+    const element = document.getElementById(elementId);
+    if (value === 0) {
+      element.className = 'metric-change';
+      element.innerHTML = '<i class="fas fa-minus"></i> Stable';
+    } else if (value > 10) {
+      element.className = isError ? 'metric-change negative' : 'metric-change positive';
+      element.innerHTML = `<i class="fas fa-arrow-${isError ? 'up' : 'down'}"></i> ${isError ? 'High' : 'Active'}`;
+    } else {
+      element.className = 'metric-change positive';
+      element.innerHTML = '<i class="fas fa-check"></i> Normal';
+    }
+  }
+
+  async loadRecentActivity() {
+    try {
+      const response = await fetch(`${this.apiBase}/api/jobs?limit=10`);
+      if (response.ok) {
+        const data = await response.json();
+        this.updateRecentActivity(data.jobs || []);
+      }
+    } catch (error) {
+      console.error('[DASHBOARD] Failed to load recent activity:', error);
+      document.getElementById('recentActivity').innerHTML = 
+        '<tr><td colspan="5">Failed to load activity</td></tr>';
+    }
+  }
+
+  updateRecentActivity(jobs) {
+    const tbody = document.getElementById('recentActivity');
+    
+    if (jobs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5">No recent activity</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = jobs.map(job => `
+      <tr>
+        <td>${new Date(job.created_at).toLocaleTimeString()}</td>
+        <td><code>${job.id.substring(0, 8)}</code></td>
+        <td>${job.type}</td>
+        <td><span class="status-badge ${job.status}">${job.status}</span></td>
+        <td>${job.duration || '--'}</td>
+      </tr>
+    `).join('');
+  }
+
+  async loadJobsData() {
+    await this.loadQueueInfo();
+    await this.loadJobHistory();
+  }
+
+  async loadQueueInfo() {
+    try {
+      const response = await fetch(`${this.apiBase}/api/queue/status`);
+      if (response.ok) {
+        const data = await response.json();
+        this.updateQueueTable(data.queues || []);
+      }
+    } catch (error) {
+      console.error('[DASHBOARD] Failed to load queue info:', error);
+      document.getElementById('queueTable').innerHTML = 
+        '<tr><td colspan="6">Failed to load queue information</td></tr>';
+    }
+  }
+
+  updateQueueTable(queues) {
+    const tbody = document.getElementById('queueTable');
+    
+    if (queues.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6">No queues found</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = queues.map(queue => `
+      <tr>
+        <td><strong>${queue.name}</strong></td>
+        <td>${queue.length}</td>
+        <td>${queue.processing}</td>
+        <td>${queue.failed}</td>
+        <td><span class="status-badge ${queue.status}">${queue.status}</span></td>
+        <td>
+          <button onclick="pauseQueue('${queue.name}')" style="padding: 0.25rem 0.5rem; background: var(--warning); color: white; border: none; border-radius: 0.25rem; margin-right: 0.5rem;">
+            <i class="fas fa-pause"></i>
+          </button>
+          <button onclick="clearQueue('${queue.name}')" style="padding: 0.25rem 0.5rem; background: var(--error); color: white; border: none; border-radius: 0.25rem;">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  async loadJobHistory() {
+    try {
+      const response = await fetch(`${this.apiBase}/api/jobs?limit=20`);
+      if (response.ok) {
+        const data = await response.json();
+        this.updateJobsTable(data.jobs || []);
+      }
+    } catch (error) {
+      console.error('[DASHBOARD] Failed to load job history:', error);
+      document.getElementById('jobsTable').innerHTML = 
+        '<tr><td colspan="6">Failed to load job history</td></tr>';
+    }
+  }
+
+  updateJobsTable(jobs) {
+    const tbody = document.getElementById('jobsTable');
+    
+    if (jobs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6">No jobs found</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = jobs.map(job => `
+      <tr>
+        <td><code>${job.id}</code></td>
+        <td>${job.type}</td>
+        <td><span class="status-badge ${job.status}">${job.status}</span></td>
+        <td>${new Date(job.created_at).toLocaleString()}</td>
+        <td>${job.duration || '--'}</td>
+        <td>
+          <button onclick="viewJob('${job.id}')" style="padding: 0.25rem 0.5rem; background: var(--info); color: white; border: none; border-radius: 0.25rem;">
+            <i class="fas fa-eye"></i>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  startAutoRefresh() {
+    setInterval(() => {
+      this.loadData();
+      console.log('[DASHBOARD] Auto-refresh completed');
+    }, this.refreshInterval);
+  }
+
+  async refreshJobs() {
+    await this.loadJobsData();
+    console.log('[DASHBOARD] Jobs data refreshed');
+  }
+}
+
+// Global functions for button actions
+window.pauseQueue = async (queueName) => {
+  console.log('[DASHBOARD] Pause queue:', queueName);
+  // Implementation would go here
+};
+
+window.clearQueue = async (queueName) => {
+  console.log('[DASHBOARD] Clear queue:', queueName);
+  // Implementation would go here
+};
+
+window.viewJob = async (jobId) => {
+  console.log('[DASHBOARD] View job:', jobId);
+  // Implementation would go here
+};
+
+window.refreshJobs = async () => {
+  if (window.dashboard) {
+    await window.dashboard.refreshJobs();
+  }
+};
+
+// Initialize dashboard when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  window.dashboard = new ProfessionalOpsDashboard();
+});
+</script>
+</body>
+</html>
