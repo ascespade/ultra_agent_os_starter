@@ -1,3 +1,4 @@
+# Pure static UI service - nginx only
 FROM nginx:alpine
 
 # Install curl for healthcheck
