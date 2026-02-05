@@ -23,6 +23,18 @@
       "port": 8080
     },
     {
+      "name": "ultra-agent-ui",
+      "source": "apps/ui",
+      "dockerfilePath": "Dockerfile.static",
+      "healthcheck": {
+        "path": "/health",
+        "interval": 30,
+        "timeout": 10,
+        "retries": 5
+      },
+      "port": 3003
+    },
+    {
       "name": "ultra-agent-worker",
       "source": ".",
       "dockerfilePath": "apps/worker/Dockerfile",

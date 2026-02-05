@@ -10,6 +10,33 @@ restartPolicyMaxRetries = 10
 [project]
 name = "ultra-agent-core-blueprint"
 
+# UI Service
+[[services]]
+name = "ultra-agent-ui"
+source = "apps/ui"
+dockerfile = "Dockerfile.static"
+icon = "🎨"
+[services.build]
+builder = "DOCKERFILE"
+[services.deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+[[services.healthcheck]]
+path = "/health"
+interval = 30
+timeout = 10
+retries = 5
+[[services.env]]
+name = "NODE_ENV"
+value = "production"
+[[services.env]]
+name = "PORT"
+value = "3003"
+[[services.env]]
+name = "API_URL"
+serviceRef = "ultra-agent-api"
+variableRef = "RAILWAY_PUBLIC_URL"
+
 # API Service
 [[services]]
 name = "ultra-agent-api"
@@ -53,25 +80,6 @@ value = ""
 [[services.env]]
 name = "DEFAULT_ADMIN_PASSWORD"
 generate = true
-
-# UI Service
-[[services]]
-name = "ultra-agent-ui"
-source = "."
-dockerfile = "apps/ui/Dockerfile.static"
-icon = "🎨"
-[[services.healthcheck]]
-path = "/health"
-interval = 30
-timeout = 10
-retries = 5
-[[services.env]]
-name = "NODE_ENV"
-value = "production"
-[[services.env]]
-name = "API_URL"
-serviceRef = "ultra-agent-api"
-variableRef = "RAILWAY_PUBLIC_URL"
 
 # Worker Service
 [[services]]
