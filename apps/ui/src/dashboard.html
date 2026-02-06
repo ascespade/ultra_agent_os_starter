@@ -874,10 +874,11 @@ body {
 <script>
 class ProfessionalOpsDashboard {
   constructor() {
-    this.apiBase = window.location.hostname === 'localhost' || window.location.hostname.includes('railway.app') 
-      ? window.location.origin + '/api'  // Use proxied API when on Railway
-      : 'https://ultra-agent-api-production.up.railway.app';  // Use direct API otherwise
+    // Use API URL from env.js, or fallback to relative /api (if proxied), or localhost
+    this.apiBase = (window.ENV && window.ENV.API_URL) ? window.ENV.API_URL : 'http://localhost:3000';
     
+    console.log('[DASHBOARD] Using API Base:', this.apiBase);
+
     this.refreshInterval = 30000; // 30 seconds
     this.isApiAvailable = false;
     this.fallbackData = {

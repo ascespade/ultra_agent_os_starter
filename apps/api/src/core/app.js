@@ -11,6 +11,7 @@ const adapterRoutes = require("../routes/adapter.routes");
 const healthRoutes = require("../routes/health.routes");
 const metricsRoutes = require("../routes/metrics.routes");
 const testDataRoutes = require("../routes/test-data.routes");
+const workerRoutes = require("../routes/worker.routes");
 
 function createApp() {
   const app = express();
@@ -27,23 +28,23 @@ function createApp() {
   });
 
   app.get("/ready", (req, res) => {
-    res.json({ 
-      status: "ready", 
+    res.json({
+      status: "ready",
       service: "api-service",
       timestamp: new Date().toISOString()
     });
   });
-  
+
   // Root endpoint for API validation
   app.get("/", (req, res) => {
-    res.json({ 
-      status: "ok", 
+    res.json({
+      status: "ok",
       service: "Ultra Agent API",
       version: "1.0.0",
       timestamp: new Date().toISOString()
     });
   });
-  
+
   // API Routes - Ops Only
   app.use("/api/jobs", jobsRoutes); // Job management
   app.use("/api/memory", memoryRoutes);
@@ -52,6 +53,7 @@ function createApp() {
   app.use("/api/metrics", metricsRoutes); // System metrics
   app.use("/api/test-data", testDataRoutes); // Test data management
   app.use("/health", healthRoutes);
+  app.use("/worker", workerRoutes);
 
   // Metrics endpoint
   app.get("/metrics", (req, res) => {
@@ -99,8 +101,8 @@ function createApp() {
 
   // 404 Handler
   app.use((req, res) => {
-    res.status(404).json({ 
-      error: "Not found", 
+    res.status(404).json({
+      error: "Not found",
       path: req.path,
       message: "The requested endpoint was not found"
     });
@@ -109,11 +111,11 @@ function createApp() {
   // Global Error Handler
   app.use((err, req, res, next) => {
     console.error("[API] Unhandled error:", err);
-    
+
     // Don't leak error details in production
     const isDevelopment = process.env.NODE_ENV !== 'production';
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: "Internal server error",
       message: isDevelopment ? err.message : "An unexpected error occurred",
       ...(isDevelopment && { stack: err.stack })
