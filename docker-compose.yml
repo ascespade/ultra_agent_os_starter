@@ -3,9 +3,9 @@ services:
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=himam
+      - POSTGRES_DB=ultra_agent
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=password
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -21,20 +21,14 @@ services:
     build:
       context: .
       dockerfile: ./apps/api/Dockerfile
+    env_file:
+      - .env.railway
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - HOST=0.0.0.0
-      - UI_URL=http://localhost:3000
-      - INTERNAL_API_KEY=docker-validator-internal-key
-      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ultra_agent
       - REDIS_URL=redis://redis:6379
-      - DATA_DIR=/data/agent
-      - JWT_SECRET=ultra-agent-jwt-secret-change-in-production
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/himam
+      - HOST=0.0.0.0
+      - PORT=3000
       - DEFAULT_ADMIN_PASSWORD=admin
-      - UI_ENABLED=true
-      - UI_PATH=/ui
     depends_on: [postgres, redis]
     restart: unless-stopped
     ports:
@@ -44,15 +38,26 @@ services:
     build:
       context: .
       dockerfile: ./apps/worker/Dockerfile
+    env_file:
+      - .env.railway
     environment:
-      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/ultra_agent
       - REDIS_URL=redis://redis:6379
-      - DATA_DIR=/data/agent
-      - JWT_SECRET=ultra-agent-jwt-secret-change-in-production
-      - INTERNAL_API_KEY=docker-validator-internal-key
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/himam
     depends_on: [postgres, redis]
     restart: unless-stopped
+
+  ui:
+    build:
+      context: ./apps/ui
+      dockerfile: Dockerfile
+    env_file:
+      - .env.railway
+    environment:
+      - PORT=3003
+      - API_URL=http://localhost:3000
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3003:3003"
 
 volumes:
   postgres_data:

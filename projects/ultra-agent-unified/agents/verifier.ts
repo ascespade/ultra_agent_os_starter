@@ -1,1 +1,0 @@
-export const verifier = { verify: (result: any, expected: any) => ({ success: true, match: 0.95, confidence: 0.9, details: "All checks passed" }), validate: (output: any) => ({ valid: true, errors: [] }) };

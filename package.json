@@ -5,8 +5,7 @@
     "workspaces": [
         "apps/api",
         "apps/worker",
-        "apps/ui",
-        "apps/ws"
+        "apps/ui"
     ],
     "scripts": {
         "start": "echo \"Core backend services - use individual service start scripts\""

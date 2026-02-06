@@ -1,1 +1,0 @@
-export const planner = { plan: (task: string) => ({ steps: ["analyze", "execute", "verify"], resources: ["cpu", "memory", "llm"], estimated_duration: "5-10min" }), validate: (plan: any) => ({ valid: true, confidence: 0.9 }) };

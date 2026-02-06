@@ -1,1 +1,0 @@
-export const schemas = { JobRequest: { id: "string", type: "string", payload: "object" }, MemoryEntry: { key: "string", value: "any", metadata: "object" }, AuthRequest: { token: "string", user: "object" }, ApiResponse: { success: "boolean", data: "any", error: "string?" } };

@@ -4,7 +4,9 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Ultra Agent OS - Unified Dashboard</title>
+<!-- Force redeploy v3 - Updated: 2026-02-06 03:00 UTC -->
+<meta name="description" content="Ultra Agent OS - Professional Operations Dashboard">
+<title>Ultra Agent OS - Ops Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -378,7 +380,7 @@ body {
   <aside class="sidebar">
     <div class="sidebar-header">
       <h1>Ultra Agent OS</h1>
-      <p>Unified Dashboard</p>
+      <p>Ops Dashboard</p>
     </div>
     
     <nav class="nav-menu">
@@ -388,19 +390,7 @@ body {
       <a class="nav-item" data-page="jobs">
         <i>💼</i> Jobs
       </a>
-      <a class="nav-item" data-page="memory">
-        <i>🧠</i> Memory
-      </a>
-      <a class="nav-item" data-page="admin">
-        <i>⚙️</i> Admin
-      </a>
     </nav>
-    
-    <div class="sidebar-footer">
-      <button class="logout-btn" onclick="window.authGate.logout()">
-        Logout
-      </button>
-    </div>
   </aside>
 
   <!-- Main Content -->
@@ -468,71 +458,129 @@ body {
         </div>
       </div>
 
-      <!-- Memory Page -->
-      <div class="page" id="memory-page">
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 class="card-title">Memory Files</h3>
-            <div id="memoryFiles" class="loading">
-              <div class="spinner"></div>
-              <p>Loading memory files...</p>
-            </div>
-          </div>
-          
-          <div class="card">
-            <h3 class="card-title">Memory Editor</h3>
-            <div id="memoryEditor">
-              <div class="form-group">
-                <label class="form-label">Filename</label>
-                <input type="text" id="memoryFilename" class="form-input" placeholder="Enter filename...">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Content (JSON)</label>
-                <textarea id="memoryContent" class="form-input" rows="10" placeholder='{"key": "value"}'></textarea>
-              </div>
-              <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-primary" onclick="saveMemory()">Save</button>
-                <button class="btn btn-secondary" onclick="loadMemory()">Load</button>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
-
-      <!-- Admin Page -->
-      <div class="page" id="admin-page">
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 class="card-title">Tenant Management</h3>
-            <div id="tenantManagement">
-              <div class="form-group">
-                <label class="form-label">Tenant Name</label>
-                <input type="text" id="tenantName" class="form-input" placeholder="Enter tenant name...">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Tenant ID</label>
-                <input type="text" id="tenantId" class="form-input" placeholder="Enter tenant ID...">
-              </div>
-              <button class="btn btn-primary" onclick="createTenant()">Create Tenant</button>
-            </div>
-          </div>
-          
-          <div class="card">
-            <h3 class="card-title">Existing Tenants</h3>
-            <div id="tenantsList" class="loading">
-              <div class="spinner"></div>
-              <p>Loading tenants...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </main>
 </div>
 
 <!-- Scripts -->
-<script src="/api-client.js"></script>
-<script src="/auth-gate.js"></script>
-<script src="/dashboard.js"></script>
+<script>
+// Ops Dashboard - System Health & Jobs Management Only
+class OpsDashboard {
+  constructor() {
+    this.apiBaseUrl = window.ENV?.API_URL || 'http://localhost:8080';
+    this.init();
+  }
+
+  async init() {
+    this.setupNavigation();
+    await this.loadSystemHealth();
+    await this.loadJobs();
+    this.startAutoRefresh();
+  }
+
+  setupNavigation() {
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const page = item.dataset.page;
+        this.switchPage(page);
+      });
+    });
+  }
+
+  switchPage(pageName) {
+    // Update navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('active');
+    });
+    document.querySelector(`[data-page="${pageName}"]`).classList.add('active');
+
+    // Update pages
+    document.querySelectorAll('.page').forEach(page => {
+      page.classList.remove('active');
+    });
+    document.getElementById(`${pageName}-page`).classList.add('active');
+  }
+
+  async loadSystemHealth() {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/health`);
+      const data = await response.json();
+      
+      document.getElementById('systemHealth').textContent = data.status || 'OK';
+      document.getElementById('systemHealth').parentElement.className = 'card status-card success';
+    } catch (error) {
+      document.getElementById('systemHealth').textContent = 'ERROR';
+      document.getElementById('systemHealth').parentElement.className = 'card status-card error';
+    }
+  }
+
+  async loadJobs() {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/api/jobs`);
+      const jobs = await response.json();
+      
+      // Update stats
+      document.getElementById('queueLength').textContent = jobs.queued || 0;
+      document.getElementById('activeJobs').textContent = jobs.active || 0;
+      
+      // Update recent jobs
+      const recentJobsContainer = document.getElementById('recentJobs');
+      if (jobs.recent && jobs.recent.length > 0) {
+        recentJobsContainer.innerHTML = jobs.recent.map(job => `
+          <div class="job-item">
+            <div class="job-info">
+              <div class="job-title">${job.type || 'Unknown'}</div>
+              <div class="job-status ${job.status}">${job.status}</div>
+            </div>
+            <div class="job-meta">
+              <span class="job-time">${new Date(job.createdAt).toLocaleTimeString()}</span>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        recentJobsContainer.innerHTML = '<p>No recent jobs</p>';
+      }
+      
+      // Update jobs list
+      const jobsListContainer = document.getElementById('jobsList');
+      if (jobs.all && jobs.all.length > 0) {
+        jobsListContainer.innerHTML = jobs.all.map(job => `
+          <div class="job-item">
+            <div class="job-info">
+              <div class="job-title">${job.type || 'Unknown'}</div>
+              <div class="job-status ${job.status}">${job.status}</div>
+            </div>
+            <div class="job-meta">
+              <span class="job-id">${job.id}</span>
+              <span class="job-time">${new Date(job.createdAt).toLocaleString()}</span>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        jobsListContainer.innerHTML = '<p>No jobs found</p>';
+      }
+    } catch (error) {
+      document.getElementById('recentJobs').innerHTML = '<p>Error loading jobs</p>';
+      document.getElementById('jobsList').innerHTML = '<p>Error loading jobs</p>';
+    }
+  }
+
+  async refreshJobs() {
+    await this.loadJobs();
+  }
+
+  startAutoRefresh() {
+    setInterval(async () => {
+      await this.loadSystemHealth();
+      await this.loadJobs();
+    }, 30000); // Refresh every 30 seconds
+  }
+}
+
+// Initialize dashboard
+const opsDashboard = new OpsDashboard();
+</script>
 </body>
 </html>

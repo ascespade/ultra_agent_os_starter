@@ -1,1 +1,0 @@
-export default function JobsPage() { return `<div><h1>Job Management</h1><div id="jobs-dashboard"></div><div id="job-queue-status"></div><script src="/widgets/dashboard.js"></script><script src="/widgets/charts.js"></script></div>`; }
