@@ -2,20 +2,20 @@
 class UltraCharts {
   constructor() {
     this.colors = {
-      primary: '#4a9eff',
+      primary: '#38bdf8',
       success: '#10b981',
-      warning: '#f97316',
+      warning: '#f59e0b',
       error: '#ef4444',
       info: '#3b82f6',
       muted: '#64748b'
     };
     
     this.gradients = {
-      primary: ['#667eea', '#764ba2'],
-      success: ['#43e97b', '#38f9d7'],
-      warning: ['#f093fb', '#f5576c'],
-      error: ['#ff6b6b', '#ee5a24'],
-      info: ['#4facfe', '#00f2fe']
+      primary: ['#1e40af', '#3b82f6'],
+      success: ['#059669', '#10b981'],
+      warning: ['#b45309', '#f59e0b'],
+      error: ['#b91c1c', '#ef4444'],
+      info: ['#0369a1', '#0ea5e9']
     };
   }
 

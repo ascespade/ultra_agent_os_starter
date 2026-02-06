@@ -151,8 +151,9 @@ class NotificationSystem {
       this.createAlert('High Error Rate', `Error rate is ${metrics.performance.errorRate}%`, this.notificationTypes.ERROR);
     }
 
-    // Check success rate
-    if (metrics.jobs.successRate < 90) {
+    // Check success rate - Only if we have significant traffic
+    const totalJobs = metrics.jobs.total || 0;
+    if (totalJobs > 10 && metrics.jobs.successRate < 90) {
       this.createAlert('Low Success Rate', `Job success rate is ${metrics.jobs.successRate}%`, this.notificationTypes.WARNING);
     }
 
@@ -187,6 +188,17 @@ class NotificationSystem {
   }
 
   createAlert(title, message, type = this.notificationTypes.INFO) {
+    // Check for duplicate alerts within the last minute
+    const duplicate = this.alerts.find(a => 
+      a.title === title && 
+      a.message === message && 
+      (new Date() - new Date(a.timestamp)) < 60000
+    );
+
+    if (duplicate) {
+      return;
+    }
+
     const alert = {
       id: Date.now(),
       title,
