@@ -996,18 +996,10 @@
         this.refreshInterval = 30000;
         this.isApiAvailable = false;
         this.charts = window.UltraCharts ? new window.UltraCharts() : null;
-
-        this.fallbackData = {
-          uptime: 7200,
-          activeJobs: 5,
-          queueLength: 12,
-          failedJobs: 2,
-          totalJobs: 150,
-          successRate: 94.5,
-          avgProcessingTime: 1250
-        };
-
-        this.metrics = { ...this.fallbackData };
+        
+        // NO MOCK DATA - Real data only
+        this.metrics = {};
+        this.throughputHistory = []; 
         this.init();
       }
 
@@ -1016,45 +1008,63 @@
         this.startHealthChecks();
         this.loadData();
         this.startAutoRefresh();
-        this.initializeCharts();
+        // Charts initialized after data load
         console.log('[DASHBOARD] Initialized at:', this.apiBase);
       }
 
-      initializeCharts() {
-        setTimeout(() => {
-          this.createPerformanceChart();
-          this.createJobStatusChart();
-        }, 1200);
+      initializeCharts(data) {
+        if (!data) return;
+        this.updatePerformanceChart(data);
+        this.updateJobStatusChart(data);
       }
 
-      createPerformanceChart() {
+      updatePerformanceChart(data) {
         const canvas = document.getElementById('performanceChart');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const data = {
-          labels: ['1h ago', '50m ago', '40m ago', '30m ago', '20m ago', '10m ago', 'Now'],
+        
+        // Maintain history of throughput
+        const now = new Date();
+        const timeLabel = now.getHours() + ':' + now.getMinutes();
+        const throughput = data.performance?.throughput || 0;
+        
+        this.throughputHistory.push({ label: timeLabel, value: throughput });
+        if (this.throughputHistory.length > 7) this.throughputHistory.shift();
+        
+        // If not enough data, just show what we have
+        const labels = this.throughputHistory.map(h => h.label);
+        const values = this.throughputHistory.map(h => h.value);
+        
+        const chartData = {
+          labels: labels,
           datasets: [{
-            label: 'Jobs Processed',
-            data: [12, 19, 15, 25, 22, 30, 28],
+            label: 'Jobs/Min (Live)',
+            data: values,
             color: '#4a9eff',
             backgroundColor: 'rgba(74, 158, 255, 0.1)'
           }]
         };
-        this.drawLineChart(ctx, data);
+        this.drawLineChart(ctx, chartData);
       }
 
-      createJobStatusChart() {
+      updateJobStatusChart(data) {
         const canvas = document.getElementById('jobStatusChart');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const data = {
+        
+        const completed = data.jobs?.completed || 0;
+        const active = data.jobs?.active || 0;
+        const pending = data.jobs?.pending || 0;
+        const failed = data.jobs?.failed || 0;
+
+        const chartData = {
           labels: ['Completed', 'Active', 'Pending', 'Failed'],
           datasets: [{
-            data: [65, 8, 12, 5],
+            data: [completed, active, pending, failed],
             backgroundColor: ['#10b981', '#3b82f6', '#f97316', '#ef4444']
           }]
         };
-        this.drawPieChart(ctx, data);
+        this.drawPieChart(ctx, chartData);
       }
 
       drawLineChart(ctx, data) {
@@ -1257,17 +1267,13 @@
       handleApiOffline() {
         this.updateStatus('api', false, 'API: Offline');
         this.isApiAvailable = false;
-        this.useFallbackData();
-      }
-
-      useFallbackData() {
-        this.metrics = { ...this.fallbackData };
-        this.updateRealMetrics({
-          jobs: this.fallbackData,
-          performance: { queueLength: this.fallbackData.queueLength, throughput: 2.5 },
-          realTime: { activeJobs: this.fallbackData.activeJobs, queueLength: this.fallbackData.queueLength, failedJobs: this.fallbackData.failedJobs }
+        // No mock data fallback - show error state
+        document.querySelectorAll('.metric-value').forEach(el => {
+          if(el.textContent === '--') el.textContent = 'Error';
         });
       }
+
+      // useFallbackData removed to enforce real data only
 
       async checkWorkerHealth() {
         try {
@@ -1302,9 +1308,18 @@
       async loadSystemMetrics() {
         try {
           const res = await fetch(`${this.apiBase}/api/metrics/performance`);
-          if (res.ok) this.updateRealMetrics(await res.json());
+          if (res.ok) {
+            const data = await res.json();
+            this.updateRealMetrics(data);
+            this.initializeCharts(data);
+            this.updateStatus('api', true, 'API: Connected');
+            this.isApiAvailable = true;
+          } else {
+            this.handleApiOffline();
+          }
         } catch (e) {
           console.error('[DASHBOARD] Metrics error:', e);
+          this.handleApiOffline();
         }
       }
 
@@ -1555,21 +1570,21 @@
     window.createTestJob = async () => {
       if (!window.dashboard) return;
       try {
-        const res = await fetch(`${window.dashboard.apiBase}/api/test-data/create-test-jobs`, {
+        const res = await fetch(`${window.dashboard.apiBase}/api/jobs`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ count: 1 })
+          body: JSON.stringify({ message: "Manual Job " + new Date().toLocaleTimeString() })
         });
         if (res.ok) {
-          alert('Test job created successfully');
+          alert('Job created successfully');
           window.dashboard.loadData();
           window.dashboard.loadJobsData();
         } else {
           const err = await res.json();
-          alert('Failed to create test job: ' + (err.message || res.statusText));
+          alert('Failed to create job: ' + (err.message || res.statusText));
         }
       } catch (e) {
-        alert('Network error while creating test job');
+        alert('Network error while creating job');
       }
     };
     
