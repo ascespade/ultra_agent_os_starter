@@ -23,18 +23,18 @@ app.get('/env.js', (req, res) => {
 
 // Serve static files from src directory
 app.use(express.static(path.join(__dirname), {
-  index: ['dashboard.html', 'index.html'],
+  index: ['dashboard.html'],
   cacheControl: true,
   maxAge: '1y',
   etag: true,
   lastModified: true
 }));
 
-// Fallback to index.html for SPA routing
+// Fallback to dashboard.html for SPA routing
 app.get('*', (req, res) => {
-  const indexPath = path.join(__dirname, 'dashboard.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
+  const dashboardPath = path.join(__dirname, 'dashboard.html');
+  if (fs.existsSync(dashboardPath)) {
+    res.sendFile(dashboardPath);
   } else {
     res.status(404).send('Dashboard not found');
   }

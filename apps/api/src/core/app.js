@@ -80,16 +80,8 @@ function createApp() {
   app.use(express.static(uiPath));
 
   // Dashboard routes - serve the main dashboard
-  app.get("/dashboard", (req, res) => {
+  app.get(["/dashboard", "/ui/", "/admin"], (req, res) => {
     res.sendFile(path.join(uiPath, "dashboard.html"));
-  });
-
-  app.get("/ui/", (req, res) => {
-    res.sendFile(path.join(uiPath, "index.html"));
-  });
-
-  app.get("/admin", (req, res) => {
-    res.sendFile(path.join(uiPath, "index_admin.html"));
   });
 
   // Environment injection for frontend

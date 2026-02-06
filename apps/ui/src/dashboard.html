@@ -610,8 +610,14 @@
         <a class="nav-item" data-page="memory">
           <i class="fas fa-brain"></i> Memory & State
         </a>
+        <a class="nav-item" data-page="system">
+          <i class="fas fa-server"></i> System
+        </a>
         <a class="nav-item" data-page="adapters">
           <i class="fas fa-plug"></i> Adapters
+        </a>
+        <a class="nav-item" data-page="admin">
+          <i class="fas fa-user-shield"></i> Admin
         </a>
       </nav>
     </aside>
@@ -802,6 +808,53 @@
               <div class="metric-header">Loading adapters...</div>
             </div>
           </div>
+        </div>
+
+        <!-- System Page -->
+        <div class="page" id="system">
+          <div class="card">
+             <div class="card-header">
+               <h3 class="card-title"><i class="fas fa-server"></i> System Info</h3>
+               <button onclick="window.dashboard.loadSystemData()" style="padding: 0.5rem 1rem; background: var(--accent); color: white; border: none; border-radius: 0.5rem; cursor: pointer;">
+                 <i class="fas fa-sync"></i> Refresh
+               </button>
+             </div>
+             <div class="metrics-grid" id="systemInfoGrid">
+                <div class="metric-card"><div class="metric-header">Loading system info...</div></div>
+             </div>
+          </div>
+          <div class="card">
+             <div class="card-header">
+               <h3 class="card-title"><i class="fas fa-database"></i> Database Metrics</h3>
+             </div>
+             <div class="metrics-grid" id="dbMetricsGrid">
+                <!-- Populated by JS -->
+             </div>
+             <div class="table-container">
+                <table class="table">
+                  <thead><tr><th>Schema</th><th>Table</th><th>Size</th></tr></thead>
+                  <tbody id="dbTablesBody"><tr><td colspan="3" class="loading">Loading...</td></tr></tbody>
+                </table>
+             </div>
+          </div>
+        </div>
+
+        <!-- Admin Page -->
+        <div class="page" id="admin">
+           <div class="card">
+             <div class="card-header">
+               <h3 class="card-title"><i class="fas fa-users"></i> Tenants</h3>
+               <button onclick="alert('Create Tenant feature coming soon')" style="padding: 0.5rem 1rem; background: var(--success); color: white; border: none; border-radius: 0.5rem; cursor: pointer;">
+                 <i class="fas fa-plus"></i> New Tenant
+               </button>
+             </div>
+             <div class="table-container">
+               <table class="table">
+                 <thead><tr><th>ID</th><th>Name</th><th>Plan</th><th>Created</th></tr></thead>
+                 <tbody id="tenantsTable"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+               </table>
+             </div>
+           </div>
         </div>
 
         <!-- Jobs Page -->
@@ -1103,8 +1156,73 @@
             if (target === 'jobs') this.loadJobsData();
             else if (target === 'memory') this.loadMemoryData();
             else if (target === 'adapters') this.loadAdaptersData();
+            else if (target === 'system') this.loadSystemData();
+            else if (target === 'admin') this.loadAdminData();
           });
         });
+      }
+
+      async loadSystemData() {
+        try {
+          const [perfRes, sysRes, dbRes] = await Promise.all([
+             fetch(`${this.apiBase}/api/metrics/performance`),
+             fetch(`${this.apiBase}/api/metrics/system`),
+             fetch(`${this.apiBase}/api/metrics/database`)
+          ]);
+
+          if (perfRes.ok) this.updateRealMetrics(await perfRes.json());
+          if (sysRes.ok) this.renderSystemInfo(await sysRes.json());
+          if (dbRes.ok) this.renderDbMetrics(await dbRes.json());
+        } catch(e) { console.error(e); }
+      }
+
+      renderSystemInfo(data) {
+        const grid = document.getElementById('systemInfoGrid');
+        if(!grid) return;
+        grid.innerHTML = `
+          <div class="metric-card"><div class="metric-header">OS</div><div class="metric-value" style="font-size:1rem">${data.platform} (${data.arch})</div></div>
+          <div class="metric-card"><div class="metric-header">Node</div><div class="metric-value" style="font-size:1rem">${data.nodeVersion}</div></div>
+          <div class="metric-card"><div class="metric-header">Uptime</div><div class="metric-value" style="font-size:1rem">${Math.floor(data.uptime/60)}m</div></div>
+        `;
+      }
+
+      renderDbMetrics(data) {
+        const grid = document.getElementById('dbMetricsGrid');
+        const tbody = document.getElementById('dbTablesBody');
+        if(grid) {
+           grid.innerHTML = `
+             <div class="metric-card"><div class="metric-header">Total Connections</div><div class="metric-value">${data.connections?.total_connections || 0}</div></div>
+             <div class="metric-card"><div class="metric-header">Active</div><div class="metric-value">${data.connections?.active_connections || 0}</div></div>
+             <div class="metric-card"><div class="metric-header">Idle</div><div class="metric-value">${data.connections?.idle_connections || 0}</div></div>
+           `;
+        }
+        if(tbody && data.tables) {
+           tbody.innerHTML = data.tables.map(t => `<tr><td>${t.schemaname}</td><td>${t.tablename}</td><td>${t.size}</td></tr>`).join('');
+        }
+      }
+
+      async loadAdminData() {
+        try {
+           const res = await fetch(`${this.apiBase}/api/admin/tenants`);
+           if(res.ok) {
+              const data = await res.json();
+              this.renderTenantsTable(data.tenants || []);
+           }
+        } catch(e) {}
+      }
+
+      renderTenantsTable(tenants) {
+         const tb = document.getElementById('tenantsTable');
+         if(!tb) return;
+         if(tenants.length === 0) { tb.innerHTML = '<tr><td colspan="4">No tenants found</td></tr>'; return; }
+         tb.innerHTML = tenants.map(t => `
+            <tr>
+              <td>${t.id}</td>
+              <td>${t.name}</td>
+              <td>${t.plan || 'Standard'}</td>
+              <td>${new Date(t.created_at).toLocaleDateString()}</td>
+            </tr>
+         `).join('');
       }
 
       async startHealthChecks() {
@@ -1425,6 +1543,14 @@
     window.refreshMemory = () => {
       if (window.dashboard) window.dashboard.loadMemoryData();
     };
+    
+    window.refreshSystem = () => {
+       if (window.dashboard) window.dashboard.loadSystemData();
+    };
+    
+    window.refreshJobs = () => {
+       if (window.dashboard) window.dashboard.loadJobsData();
+    };
 
     window.createTestJob = async () => {
       if (!window.dashboard) return;
@@ -1437,6 +1563,7 @@
         if (res.ok) {
           alert('Test job created successfully');
           window.dashboard.loadData();
+          window.dashboard.loadJobsData();
         } else {
           const err = await res.json();
           alert('Failed to create test job: ' + (err.message || res.statusText));
@@ -1445,7 +1572,12 @@
         alert('Network error while creating test job');
       }
     };
+    
+    window.createTenant = () => {
+       alert('Tenant creation UI not yet implemented. Use API directly.');
+    };
   </script>
+
 </body>
 
 </html>

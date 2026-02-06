@@ -41,8 +41,8 @@ function createUIStaticMiddleware(options = {}) {
         if (err) {
           next(err);
         } else if (!res.headersSent) {
-          // If file not found, serve index.html for SPA routing
-          req.url = '/index.html';
+          // If file not found, serve dashboard.html for SPA routing
+          req.url = '/dashboard.html';
           staticMiddleware(req, res, next);
         } else {
           next();
