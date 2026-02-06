@@ -1340,19 +1340,19 @@
 
       renderAdaptersGrid(data) {
         const grid = document.getElementById('adaptersGrid');
-        if (!grid) return;
-        const ollamaS = data.ollama?.available ? 'success' : 'error';
-        const dockerS = data.docker?.available ? 'success' : 'error';
+        if (!grid || !data.adapters) return;
+        const ollamaS = data.adapters.ollama?.available ? 'success' : 'error';
+        const dockerS = data.adapters.docker?.available ? 'success' : 'error';
         grid.innerHTML = `
           <div class="metric-card ${ollamaS}">
             <div class="metric-header"><span class="metric-title">Ollama LLM</span><i class="fas fa-brain"></i></div>
-            <div class="metric-value">${data.ollama?.available ? 'Online' : 'Offline'}</div>
-            <div class="metric-change">${data.ollama?.model || 'No model loaded'}</div>
+            <div class="metric-value">${data.adapters.ollama?.available ? 'Online' : 'Offline'}</div>
+            <div class="metric-change">${data.adapters.ollama?.status || 'No model loaded'}</div>
           </div>
           <div class="metric-card ${dockerS}">
             <div class="metric-header"><span class="metric-title">Docker Runtime</span><i class="fab fa-docker"></i></div>
-            <div class="metric-value">${data.docker?.available ? 'Active' : 'Inactive'}</div>
-            <div class="metric-change">${data.docker?.version || 'Unknown version'}</div>
+            <div class="metric-value">${data.adapters.docker?.available ? 'Active' : 'Inactive'}</div>
+            <div class="metric-change">${data.adapters.docker?.status || 'Unknown status'}</div>
           </div>
         `;
       }
