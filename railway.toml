@@ -10,6 +10,7 @@ icon = "🎨"
 [services.build]
 builder = "DOCKERFILE"
 [services.deploy]
+startCommand = "npm run static"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 [[services.healthcheck]]
