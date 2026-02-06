@@ -28,7 +28,17 @@ This project is configured for seamless deployment on Railway.
 2.  **Variables:** Ensure `.env.railway` variables are set in the Railway project settings (Postgres/Redis variables are auto-injected if you add those plugins).
 3.  **Deploy:** Pushing to `main` triggers deployment.
 
-## 📁 Project Structure
+## � Documentation
+
+- **Complete Guide**: [DOCUMENTATION.md](DOCUMENTATION.md) - Full project documentation
+- **Project Structure**: [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - Directory organization
+- **All Docs**: [docs/](docs/) - Organized documentation directory
+  - [docs/README.md](docs/README.md) - Documentation navigation guide
+  - [docs/phases/](docs/phases/) - Phase-by-phase reports
+  - [docs/reports/](docs/reports/) - System analysis reports
+  - [docs/deployment/](docs/deployment/) - Deployment guides
+
+## �📁 Project Structure
 
 - `apps/api`: Node.js Express API service.
 - `apps/worker`: Job processing worker.
