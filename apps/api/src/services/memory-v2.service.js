@@ -211,12 +211,13 @@ class MemoryServiceV2 {
         effectiveUserId = u.rows[0]?.id ?? null;
       }
 
+      // Use the new memory_entries table instead of memories
       let memoryResult = { rows: [] };
       if (effectiveUserId != null) {
         const memoryQuery = `
-          SELECT id, key, created_at, updated_at
-          FROM memories
-          WHERE tenant_id = $1 AND user_id = $2
+          SELECT id, agent_id as key, content, created_at, updated_at
+          FROM memory_entries
+          WHERE tenant_id = $1 AND agent_id = $2
           ORDER BY updated_at DESC
           LIMIT 50
         `;
@@ -231,28 +232,15 @@ class MemoryServiceV2 {
         ORDER BY created_at DESC
         LIMIT 50
       `;
-
-      let jobs = [];
-      try {
-        const jobsResult = await client.query(jobsQuery, [tenantId]);
-        jobs = jobsResult.rows;
-      } catch (err) {
-        logger.warn({ error: err.message }, 'Jobs table not available, returning empty jobs list');
-      }
+      const jobsResult = await client.query(jobsQuery, [tenantId]);
 
       return {
         memories: memoryResult.rows,
-        jobs: jobs,
-        total_memories: memoryResult.rows.length,
-        total_jobs: jobs.length,
-        workspace_info: {
-          tenant_id: tenantId,
-          user_id: userId
-        }
+        jobs: jobsResult.rows,
+        tenantId,
+        userId,
+        timestamp: new Date().toISOString()
       };
-    } catch (error) {
-      logger.error({ error: error.message, tenantId, userId }, 'Failed to get workspace');
-      throw error;
     } finally {
       client.release();
     }

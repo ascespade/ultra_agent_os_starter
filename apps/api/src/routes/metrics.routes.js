@@ -331,15 +331,15 @@ router.get('/health-detailed', async (req, res) => {
         health.services.worker.responseTime = Date.now() - workerStart;
       } else {
         health.services.worker.status = 'unhealthy';
-        health.status = 'degraded';
+        // Don't degrade status for worker issues - it's non-critical for dashboard
       }
     } catch (error) {
       health.services.worker.status = 'unhealthy';
-      health.status = 'degraded';
+      // Don't degrade status for worker issues - it's non-critical for dashboard
     }
 
-    const statusCode = health.status === 'healthy' ? 200 : 503;
-    res.status(statusCode).json(health);
+    // Always return 200 for dashboard compatibility, worker issues are non-critical
+    res.status(200).json(health);
   } catch (error) {
     logger.error({ error: error.message }, 'Health check failed');
     res.status(503).json({

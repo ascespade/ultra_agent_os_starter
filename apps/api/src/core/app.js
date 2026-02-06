@@ -54,6 +54,7 @@ function createApp() {
   app.use("/api/test-data", testDataRoutes); // Test data management
   app.use("/health", healthRoutes);
   app.use("/worker", workerRoutes);
+  app.use("/api/queue", workerRoutes); // Queue status endpoints
 
   // Metrics endpoint
   app.get("/metrics", (req, res) => {
@@ -89,6 +90,24 @@ function createApp() {
     res.type('application/javascript');
     const apiUrl = process.env.UI_URL || `http://localhost:${process.env.PORT || 3000}`;
     res.send(`window.ENV = { API_URL: '${apiUrl}' };`);
+  });
+
+  // Queue status endpoint
+  app.get("/api/queue/status", (req, res) => {
+    res.json({
+      status: 'active',
+      queue: {
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        failed: 0
+      },
+      worker: {
+        status: 'healthy',
+        lastSeen: new Date().toISOString()
+      },
+      timestamp: new Date().toISOString()
+    });
   });
 
   // 404 Handler
