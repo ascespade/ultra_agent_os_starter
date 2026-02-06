@@ -160,45 +160,20 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
   }
 }
 
-// Adapter: Ollama LLM Integration with Circuit Breaker Protection
-// Type: PLUGGABLE_ADAPTER
-// Status: Graceful fallback when unavailable
+const llmRegistry = require('../../../lib/llm/registry');
 async function callLLM(prompt, context = {}) {
-  if (!OLLAMA_URL) {
-    console.log('[ADAPTER] Ollama URL not configured');
-    return null;
-  }
-
   const operation = async () => {
-    const response = await axios.post(`${OLLAMA_URL}/api/generate`, {
-      model: 'llama3.2',
-      prompt: `Context: ${JSON.stringify(context)}\n\nSystem Task: ${prompt}\n\nResponse:`,
-      stream: false,
-      options: {
-        temperature: 0.1,
-        num_predict: 500
-      }
-    }, {
-      timeout: 60000 // 60 second timeout
-    });
-    return response.data.response;
+    return await llmRegistry.generate(prompt, context);
   };
-
   try {
     await ollamaCircuitBreaker.initialize(redisClient);
-    const result = await ollamaCircuitBreaker.execute('ollama_api', operation, 60000);
-
-    if (result.success) {
+    const result = await ollamaCircuitBreaker.execute('llm_api', operation, 60000);
+    if (result.success && result.result) {
       return result.result;
     } else {
-      console.log('[ADAPTER] Ollama LLM unavailable:', result.error);
-      if (result.circuitOpen) {
-        console.log('[ADAPTER] Ollama circuit breaker is open - protecting against overload');
-      }
       return null;
     }
   } catch (error) {
-    console.log('[ADAPTER] Ollama LLM error:', error.message);
     return null;
   }
 }

@@ -1,0 +1,49 @@
+{
+  "phase": "PHASE_0_PRE_FLIGHT_SANITY",
+  "timestamp": "2026-02-06T05:19:41.342Z",
+  "checks": [
+    {
+      "name": "Node.js version >= 18.x",
+      "status": "PASS",
+      "result": "v18.19.1"
+    },
+    {
+      "name": "npm is available",
+      "status": "PASS",
+      "result": "9.2.0"
+    },
+    {
+      "name": "package.json exists",
+      "status": "PASS",
+      "result": "ultra-agent-core"
+    },
+    {
+      "name": "node_modules exists",
+      "status": "PASS",
+      "result": "installed"
+    },
+    {
+      "name": "API service package.json",
+      "status": "PASS",
+      "result": "ultra-agent-api"
+    },
+    {
+      "name": "Worker service package.json",
+      "status": "PASS",
+      "result": "ultra-agent-worker"
+    },
+    {
+      "name": "API server.js exists",
+      "status": "PASS",
+      "result": "4424 bytes"
+    },
+    {
+      "name": "Worker worker.js exists",
+      "status": "PASS",
+      "result": "25101 bytes"
+    }
+  ],
+  "passed": 8,
+  "failed": 0,
+  "overall": "PASS"
+}
