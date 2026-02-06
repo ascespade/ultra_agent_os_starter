@@ -55,14 +55,21 @@ class MemoryServiceV2 {
   async createMemory(tenantId, userId, key, content) {
     const client = await this.pool.connect();
     try {
-      // Direct INSERT - no UPSERT logic as per orchestrator
+      let effectiveUserId = userId;
+      if (userId === 'system') {
+        const u = await client.query('SELECT id FROM users ORDER BY id LIMIT 1');
+        effectiveUserId = u.rows[0]?.id ?? null;
+      }
+      if (effectiveUserId == null) {
+        throw new Error('No user available for system memory write');
+      }
       const query = `
         INSERT INTO memories (tenant_id, user_id, key, content)
         VALUES ($1, $2, $3, $4)
         RETURNING id, created_at, updated_at
       `;
 
-      const values = [tenantId, userId, key, JSON.stringify(content)];
+      const values = [tenantId, effectiveUserId, key, JSON.stringify(content)];
       const result = await client.query(query, values);
 
       logger.info({ tenantId, userId, key, memoryId: result.rows[0].id }, 'Memory created successfully');
@@ -86,13 +93,19 @@ class MemoryServiceV2 {
   async getMemory(tenantId, userId, key) {
     const client = await this.pool.connect();
     try {
+      let effectiveUserId = userId;
+      if (userId === 'system') {
+        const u = await client.query('SELECT id FROM users ORDER BY id LIMIT 1');
+        effectiveUserId = u.rows[0]?.id ?? null;
+      }
+      if (effectiveUserId == null) return null;
       const query = `
         SELECT id, key, content, created_at, updated_at
         FROM memories
         WHERE tenant_id = $1 AND user_id = $2 AND key = $3
       `;
 
-      const result = await client.query(query, [tenantId, userId, key]);
+      const result = await client.query(query, [tenantId, effectiveUserId, key]);
       
       if (result.rows.length === 0) {
         return null;
@@ -117,6 +130,12 @@ class MemoryServiceV2 {
   async updateMemory(tenantId, userId, key, content) {
     const client = await this.pool.connect();
     try {
+      let effectiveUserId = userId;
+      if (userId === 'system') {
+        const u = await client.query('SELECT id FROM users ORDER BY id LIMIT 1');
+        effectiveUserId = u.rows[0]?.id ?? null;
+      }
+      if (effectiveUserId == null) return null;
       const query = `
         UPDATE memories 
         SET content = $1, updated_at = NOW()
@@ -124,7 +143,7 @@ class MemoryServiceV2 {
         RETURNING id, created_at, updated_at
       `;
 
-      const values = [JSON.stringify(content), tenantId, userId, key];
+      const values = [JSON.stringify(content), tenantId, effectiveUserId, key];
       const result = await client.query(query, values);
       
       if (result.rows.length === 0) {
@@ -152,13 +171,19 @@ class MemoryServiceV2 {
   async deleteMemory(tenantId, userId, key) {
     const client = await this.pool.connect();
     try {
+      let effectiveUserId = userId;
+      if (userId === 'system') {
+        const u = await client.query('SELECT id FROM users ORDER BY id LIMIT 1');
+        effectiveUserId = u.rows[0]?.id ?? null;
+      }
+      if (effectiveUserId == null) return { success: false, message: 'No user available' };
       const query = `
         DELETE FROM memories
         WHERE tenant_id = $1 AND user_id = $2 AND key = $3
         RETURNING id
       `;
 
-      const result = await client.query(query, [tenantId, userId, key]);
+      const result = await client.query(query, [tenantId, effectiveUserId, key]);
       
       if (result.rows.length === 0) {
         return { success: false, message: 'Memory not found' };

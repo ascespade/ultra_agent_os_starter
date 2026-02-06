@@ -2,29 +2,28 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files from the root context for this service
-COPY apps/api/package*.json ./
-
-# Install dependencies (use ci for faster, more reliable builds if package-lock exists)
-RUN npm install --only=production
-
-# Copy libraries and shared components from the root context
+# Preserve repo structure for require('../../../lib/...') paths
 COPY lib ./lib
-COPY apps/ui/src ./ui/src
-# Copy specifically the API source
-COPY apps/api/src ./src
+COPY apps ./apps
+COPY package.json package-lock.json* ./
 
-# Create non-root user for security
+# Install root deps (pg, redis for lib/db-connector) + API deps
+RUN npm install pg redis --omit=dev 2>/dev/null || true
+RUN cd apps/api && npm install --omit=dev
+
+WORKDIR /app/apps/api
+
+# Prefer API node_modules for resolution (has pg, redis)
+ENV NODE_PATH=/app/apps/api/node_modules
+
+# Create non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S apiuser -u 1001
-
-# Change ownership
 RUN chown -R apiuser:nodejs /app
 USER apiuser
 
-# Health check (matches railway.json and app routing)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 8080) + '/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 3000) + '/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
-EXPOSE 8080
+EXPOSE 3000
 
 CMD ["node", "src/server.js"]
