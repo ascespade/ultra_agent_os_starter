@@ -22,6 +22,8 @@
  ## Verification
  - Runtime validation: `node scripts/runtime-validation.js` ✅ PASS
  - UI server smoke run: `PORT=3010 node apps/ui/src/server.js` ✅ Started; [Preview](http://localhost:3010/)
+ - Fixed UI server routing to avoid returning HTML for API paths:
+   - [apps/ui/src/server.js](file:///home-al-hemam/ultra_agent_os_starter/apps/ui/src/server.js#L38-L46) now returns 404 JSON for `/api/*` paths, preventing JSON parse errors in the dashboard when API is not running locally.
  
  ## Remaining Notes
  - Full end-to-end tests require running API/DB/Redis/Worker; these are environment-dependent and were not executed here

@@ -153,7 +153,13 @@ router.get('/performance', async (req, res) => {
     
     let queueLength = 0;
     try {
-      queueLength = await client.lLen('jobs:queue');
+      const tenants = await client.sMembers('tenants');
+      const tenantList = tenants && tenants.length > 0 ? tenants : ['default', 'system'];
+      
+      for (const tenant of tenantList) {
+        const len = await client.lLen(`tenant:${tenant}:job_queue`);
+        queueLength += len;
+      }
     } catch (error) {
       logger.warn('Redis queue length check failed:', error.message);
     }
@@ -210,10 +216,29 @@ router.get('/queue-status', async (req, res) => {
     const client = redis.createClient({ url: process.env.REDIS_URL });
     await client.connect();
     
-    // Get real queue metrics
-    const queueLength = await client.lLen('jobs:queue');
-    const processingQueue = await client.lLen('jobs:processing');
-    const failedQueue = await client.lLen('jobs:failed');
+    const tenants = await client.sMembers('tenants');
+    const tenantList = tenants && tenants.length > 0 ? tenants : ['default', 'system'];
+    
+    let totalQueueLength = 0;
+    const queues = [];
+    
+    for (const tenant of tenantList) {
+        const queueName = `tenant:${tenant}:job_queue`;
+        const len = await client.lLen(queueName);
+        totalQueueLength += len;
+        
+        queues.push({
+            name: queueName,
+            length: len,
+            processing: 0, // Simplified as we don't track processing list per tenant yet
+            failed: 0,
+            status: len > 100 ? 'warning' : len > 50 ? 'info' : 'success'
+        });
+    }
+    
+    // Get processing and failed from global lists if they exist, or just placeholder
+    const processingQueue = 0;
+    const failedQueue = await client.lLen('jobs:failed'); // This might need tenant-aware logic too later
     
     // Get queue info
     const queueInfo = await client.info('memory');
@@ -231,38 +256,14 @@ router.get('/queue-status', async (req, res) => {
       GROUP BY status
     `);
     
-    const queues = [
-      {
-        name: 'jobs:queue',
-        length: queueLength,
-        processing: processingQueue,
-        failed: failedQueue,
-        status: queueLength > 100 ? 'warning' : queueLength > 50 ? 'info' : 'success'
-      },
-      {
-        name: 'jobs:processing',
-        length: processingQueue,
-        processing: processingQueue,
-        failed: 0,
-        status: 'info'
-      },
-      {
-        name: 'jobs:failed',
-        length: failedQueue,
-        processing: 0,
-        failed: failedQueue,
-        status: failedQueue > 10 ? 'error' : failedQueue > 5 ? 'warning' : 'info'
-      }
-    ];
-    
     const metrics = {
       timestamp: new Date().toISOString(),
-      length: queueLength,
+      length: totalQueueLength,
       processing: processingQueue,
       failed: failedQueue,
       queues: queues,
       database: dbStats.rows,
-      status: queueLength > 100 ? 'warning' : 'healthy'
+      status: totalQueueLength > 100 ? 'warning' : 'healthy'
     };
 
     logger.debug('Real queue status retrieved');

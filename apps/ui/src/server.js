@@ -35,8 +35,16 @@ app.use(express.static(path.join(__dirname), {
   lastModified: true
 }));
 
-// Fallback to index.html for SPA routing
+// Prevent UI server from hijacking API routes
+app.get('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API not available via UI server', path: req.path });
+});
+
+// Fallback to index.html for SPA routing (non-API routes only)
 app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API not available via UI server', path: req.path });
+  }
   const indexPath = path.join(__dirname, 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);

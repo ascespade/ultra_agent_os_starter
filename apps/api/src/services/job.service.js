@@ -113,7 +113,8 @@ class JobService {
           type,
           priority,
           status: result.rows[0].status,
-          created_at: result.rows[0].created_at
+          created_at: result.rows[0].created_at,
+          ...inputData
         });
         logger.debug({ jobId }, 'Job enqueued successfully');
       } catch (redisError) {
@@ -420,7 +421,7 @@ class JobService {
     try {
       const query = `
         SELECT id, tenant_id, user_id, type, status, priority,
-               input_data, output_data, error_message, error_details,
+               input_data, output_data, error_message,
                retry_count, max_retries, retry_delay_ms, visibility_timeout_ms,
                created_at, updated_at, started_at, completed_at,
                expires_at, worker_id, queue_name, metadata, tags

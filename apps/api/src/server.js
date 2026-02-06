@@ -49,6 +49,7 @@ const { initializeDatabase, executeMigrations, closeDatabase } = require("../../
 const { initializeRedis, CircuitBreaker } = require("./services/redis.service");
 const memoryService = require("./services/memory-v2.service");
 const jobService = require("./services/job.service");
+const llmProviderService = require("./services/llm-provider.service");
 const { initializeDefaultUser } = require("./core/init");
 const pino = require('pino');
 
@@ -67,6 +68,7 @@ async function startServer() {
     await initializeRedis();
     await memoryService.initialize();
     await jobService.initialize();
+    await llmProviderService.initialize();
 
     // 2. Initialize App (REST only)
     const app = createApp();

@@ -1515,6 +1515,27 @@
     });
 
     // Global Actions
+    window.refreshJobs = () => window.dashboard && window.dashboard.loadJobsData();
+    window.refreshPerformanceChart = () => window.dashboard && window.dashboard.loadSystemMetrics();
+    window.refreshMemory = () => window.dashboard && window.dashboard.loadMemoryData();
+
+    window.createTestJob = async () => {
+      if (!window.dashboard) return;
+      try {
+        const res = await fetch(`${window.dashboard.apiBase}/api/jobs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: 'Manual Test Job via Dashboard ' + new Date().toISOString() })
+        });
+        if (res.ok) {
+            alert('Test job created successfully!');
+            window.dashboard.loadJobsData();
+        } else {
+            alert('Failed to create job');
+        }
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
     window.pauseQueue = (n) => alert('Queue pause feature coming soon for ' + n);
     window.clearQueue = (n) => {
       if (confirm('Are you sure you want to clear ' + n + '?')) {

@@ -10,4 +10,11 @@ const router = express.Router();
 router.get('/status', adapterController.getStatus);
 router.post('/test', validate.testAdapter, adapterController.testAdapter);
 
+// Provider management
+router.get('/providers', adapterController.listProviders);
+router.post('/providers/switch', adapterController.switchProvider);
+router.post('/providers/:providerId/config', adapterController.updateProviderConfig);
+router.post('/providers/:providerId/health', adapterController.healthCheckProvider);
+router.get('/providers/:providerId/usage', adapterController.getProviderUsage);
+
 module.exports = router;

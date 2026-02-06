@@ -1,13 +1,16 @@
 const dbConnector = require("../../../../lib/db-connector");
 const { getClient: getRedisClient } = require("../services/redis.service");
+const llmProviderService = require("../services/llm-provider.service");
 
 async function getStatus(req, res) {
   try {
-    // Adapter checks
-    const ollamaAvailable =
-      process.env.OLLAMA_URL &&
-      process.env.OLLAMA_URL.trim() !== "" &&
-      !process.env.OLLAMA_URL.includes("localhost");
+    // Get providers from new LLM provider service
+    const providers = llmProviderService.listProviders();
+    const activeProvider = providers.find(p => p.isActive);
+    
+    const ollamaAvailable = providers.some(p => p.type === 'ollama');
+    
+    // Docker check (keep existing env check for now as we don't have a Docker service wrapper yet)
     const dockerAvailable =
       process.env.DOCKER_HOST &&
       process.env.DOCKER_HOST.trim() !== "" &&
@@ -63,6 +66,12 @@ async function getStatus(req, res) {
         is_overloaded: queueLength >= 100,
       },
       adapters: {
+        llm: {
+          active_provider: activeProvider ? activeProvider.name : 'none',
+          providers: providers,
+          status: activeProvider ? 'configured' : 'not_configured'
+        },
+        // Keep legacy format for UI compatibility for now
         ollama: {
           available: ollamaAvailable,
           url: process.env.OLLAMA_URL || "not_configured",
@@ -97,6 +106,16 @@ async function testAdapter(req, res) {
   const { provider, url, model, apiKey } = req.body;
 
   try {
+    // If testing a registered provider
+    if (!url && !apiKey && llmService.getProvider(provider)) {
+       const result = await llmService.testProvider(provider);
+       return res.json({ 
+         success: result, 
+         message: result ? `${provider} is healthy` : `${provider} check failed` 
+       });
+    }
+
+    // Ad-hoc testing logic
     let result = {};
 
     switch (provider) {
@@ -116,9 +135,20 @@ async function testAdapter(req, res) {
           error: ollamaResponse.error
         };
         break;
-
-      // ... (OpenAI, Gemini logic can be added here similar to original server.js)
-      // Simplifying for brevity to respect 400 lines limit, but keeping core logic.
+      
+      case "openai":
+         // Basic connectivity check for OpenAI (if key provided)
+         if (!apiKey) throw new Error("API Key required for OpenAI test");
+         // We can use the llmService's class for ad-hoc test if we exposed it, but for now simple fetch
+         const openaiRes = await fetch(`${url || 'https://api.openai.com/v1'}/models`, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+         }).catch(e => ({ ok: false, statusText: e.message }));
+         
+         result = {
+            success: openaiRes.ok,
+            message: openaiRes.ok ? "OpenAI Connected" : `Failed: ${openaiRes.statusText}`
+         };
+         break;
 
       default:
         return res.status(400).json({ error: "Unknown or unsupported provider for test" });
@@ -131,7 +161,122 @@ async function testAdapter(req, res) {
   }
 }
 
+async function listProviders(req, res) {
+  try {
+    const providers = llmProviderService.listProviders();
+    res.json({ providers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function switchProvider(req, res) {
+  const { provider } = req.body;
+  if (!provider) return res.status(400).json({ error: "Provider name required" });
+  
+  try {
+    const result = await llmProviderService.setActiveProvider(provider);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function updateProviderConfig(req, res) {
+  const { providerId } = req.params;
+  const { config } = req.body;
+  
+  if (!config) return res.status(400).json({ error: "Configuration required" });
+  
+  try {
+    const db = dbConnector.getPool();
+    await db.query(`
+      UPDATE llm_providers 
+      SET config = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [JSON.stringify(config), providerId]);
+    
+    // Reload providers from database
+    await llmProviderService.loadProvidersFromDatabase();
+    
+    res.json({ success: true, message: "Provider configuration updated" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function healthCheckProvider(req, res) {
+  const { providerId } = req.params;
+  
+  try {
+    const db = dbConnector.getPool();
+    const result = await db.query(`
+      SELECT name, type, config 
+      FROM llm_providers 
+      WHERE id = $1 AND is_enabled = true
+    `, [providerId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Provider not found" });
+    }
+    
+    const provider = result.rows[0];
+    const healthResults = await llmProviderService.healthCheck();
+    const providerHealth = healthResults.find(h => h.name === provider.name);
+    
+    res.json({
+      providerId,
+      name: provider.name,
+      type: provider.type,
+      healthy: providerHealth?.healthy || false,
+      lastChecked: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function getProviderUsage(req, res) {
+  const { providerId } = req.params;
+  const { limit = 100, offset = 0 } = req.query;
+  
+  try {
+    const db = dbConnector.getPool();
+    const result = await db.query(`
+      SELECT usage_type, tokens_used, cost_cents, request_duration_ms, 
+             model_used, created_at
+      FROM llm_provider_usage 
+      WHERE provider_id = $1 
+      ORDER BY created_at DESC 
+      LIMIT $2 OFFSET $3
+    `, [providerId, limit, offset]);
+    
+    const totalResult = await db.query(`
+      SELECT COUNT(*) as total 
+      FROM llm_provider_usage 
+      WHERE provider_id = $1
+    `, [providerId]);
+    
+    res.json({
+      providerId,
+      usage: result.rows,
+      pagination: {
+        total: parseInt(totalResult.rows[0].total),
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   getStatus,
-  testAdapter
+  testAdapter,
+  listProviders,
+  switchProvider,
+  updateProviderConfig,
+  healthCheckProvider,
+  getProviderUsage
 };

@@ -104,18 +104,32 @@ async function getNextJob() {
 
 async function updateJobStatus(jobId, status, result = null, error = null) {
   try {
-    const updateQuery = `
-      UPDATE jobs 
-      SET status = $1, output_data = $2, error_message = $3, updated_at = NOW()
-      WHERE id = $4
-    `;
-    
-    await pool.query(updateQuery, [
+    // CRITICAL FIX: Build dynamic SET clause with timestamps
+    let setClause = 'status = $1, output_data = $2, error_message = $3, updated_at = NOW()';
+    let values = [
       status,
       result ? JSON.stringify(result) : null,
       error,
       jobId
-    ]);
+    ];
+    
+    // CRITICAL FIX: Add started_at when transitioning to processing
+    if (status === 'processing') {
+      setClause += ', started_at = NOW()';
+    }
+    
+    // CRITICAL FIX: Add completed_at when transitioning to completed
+    if (status === 'completed') {
+      setClause += ', completed_at = NOW()';
+    }
+    
+    const updateQuery = `
+      UPDATE jobs 
+      SET ${setClause}
+      WHERE id = $${values.length}
+    `;
+    
+    await pool.query(updateQuery, values);
 
     // Update Redis cache
     const jobKey = `job:${jobId}`;
@@ -149,6 +163,9 @@ async function processJob(jobData, queueKey, tenantId) {
   logger.info({ jobId, type, tenantId }, 'Processing job');
 
   try {
+    // CRITICAL FIX: Update job status to processing when starting
+    await updateJobStatus(jobId, 'processing');
+    
     // Simulate job processing
     let result;
     

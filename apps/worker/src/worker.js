@@ -123,20 +123,36 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
       return;
     }
 
-    // 3. Update with optimistic locking (ensure status hasn't changed since read)
-    const result = await db.query(`
-      UPDATE jobs 
-      SET status = $1, output_data = $2, error_message = $3, updated_at = NOW()
-      WHERE id = $4 AND tenant_id = $5 AND status = $6
-      RETURNING id
-    `, [
+    // 3. Update with optimistic locking and proper timestamps (CRITICAL FIX)
+    let setClause = 'status = $1, output_data = $2, error_message = $3, updated_at = NOW()';
+    let values = [
       status,
       JSON.stringify(updates),
       updates.error || null,
       jobId,
       tenantId,
       currentStatus // Optimistic locking check
-    ]);
+    ];
+    
+    // CRITICAL FIX: Set started_at when transitioning to processing
+    if (status === 'processing' && currentStatus !== 'processing') {
+      setClause += ', started_at = NOW()';
+    }
+    
+    // CRITICAL FIX: Set completed_at when transitioning to completed
+    if (status === 'completed' && currentStatus !== 'completed') {
+      setClause += ', completed_at = NOW()';
+    }
+    
+    const result = await db.query(`
+      UPDATE jobs 
+      SET ${setClause}
+      WHERE id = $${values.length - 2} AND tenant_id = $${values.length - 1} AND status = $${values.length}
+      RETURNING id, started_at, completed_at
+    `, values);
+
+    console.log(`[WORKER] SQL DEBUG: setClause="${setClause}", values=${JSON.stringify(values)}`);
+    console.log(`[WORKER] SQL RESULT: ${JSON.stringify(result.rows)}`);
 
     if (result.rows.length === 0) {
       console.warn(`[WORKER] Concurrent modification detected for ${jobId}. Expected status ${currentStatus}, but it changed.`);
@@ -160,10 +176,10 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
   }
 }
 
-const llmRegistry = require('../../../lib/llm/registry');
+const llmProviderService = require('../../../lib/llm/registry');
 async function callLLM(prompt, context = {}) {
   const operation = async () => {
-    return await llmRegistry.generate(prompt, context);
+    return await llmProviderService.generate(prompt, context);
   };
   try {
     await ollamaCircuitBreaker.initialize(redisClient);
@@ -650,7 +666,7 @@ async function workerLoop() {
       }
       const queueKeys = tenants.map(t => `tenant:${t}:job_queue`);
       const timeout = 10;
-      const jobData = await redisClient.blPop(...queueKeys, timeout);
+      const jobData = await redisClient.blPop(queueKeys, timeout);
 
       if (jobData) {
         idleCount = 0;
