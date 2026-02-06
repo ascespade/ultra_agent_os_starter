@@ -99,7 +99,7 @@ const StateMachine = require('../../../lib/state-machine');
 async function updateJobStatus(jobId, tenantId, status, updates = {}) {
   const db = require('../../../lib/db-connector').getPool();
   const redisKey = `tenant:${tenantId}:job:${jobId}`;
-  
+
   try {
     // 1. Get current status first for validation
     const currentJob = await db.query(
@@ -120,7 +120,7 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
     } catch (validationError) {
       console.error(`[WORKER] Invalid state transition blocked: ${validationError.message}`);
       // Don't update DB if invalid transition, but maybe log it?
-      return; 
+      return;
     }
 
     // 3. Update with optimistic locking (ensure status hasn't changed since read)
@@ -137,14 +137,14 @@ async function updateJobStatus(jobId, tenantId, status, updates = {}) {
       tenantId,
       currentStatus // Optimistic locking check
     ]);
-    
+
     if (result.rows.length === 0) {
       console.warn(`[WORKER] Concurrent modification detected for ${jobId}. Expected status ${currentStatus}, but it changed.`);
       // Retry could be implemented here, but for now we warn
     } else {
       console.log(`[WORKER] Job ${jobId} transitioned: ${currentStatus} -> ${status}`);
     }
-    
+
     // 4. Update Redis (best effort)
     const jobData = await redisClient.hGet(redisKey, 'data');
     if (jobData) {
@@ -187,7 +187,7 @@ async function callLLM(prompt, context = {}) {
   try {
     await ollamaCircuitBreaker.initialize(redisClient);
     const result = await ollamaCircuitBreaker.execute('ollama_api', operation, 60000);
-    
+
     if (result.success) {
       return result.result;
     } else {
@@ -207,7 +207,7 @@ async function callLLM(prompt, context = {}) {
 async function analyzeIntent(message) {
   // Try LLM adapter first
   const llmResult = await callLLM(`Analyze system task: ${message}`);
-  
+
   if (llmResult) {
     console.log('[ADAPTER] Using LLM-enhanced intent analysis');
     return {
@@ -216,9 +216,9 @@ async function analyzeIntent(message) {
       adapter_enhanced: true
     };
   }
-  
+
   // Core fallback analysis (always available)
-  return { 
+  return {
     analysis: 'Core analysis: ' + message,
     intent: message,
     adapter_enhanced: false
@@ -232,10 +232,10 @@ async function createPlan(intent) {
     constraints: readMemoryFile('constraints.json'),
     knownIssues: readMemoryFile('known_issues.json')
   };
-  
+
   // Try LLM adapter for plan enhancement
   const llmPlan = await callLLM(`Create execution plan for: ${intent.intent}`, memory);
-  
+
   if (llmPlan) {
     console.log('[ADAPTER] Using LLM-enhanced planning');
     try {
@@ -264,7 +264,7 @@ async function createPlan(intent) {
       };
     }
   }
-  
+
   // Core fallback plan (always available)
   console.log('[CORE] Using core planning logic');
   return {
@@ -278,12 +278,12 @@ async function createPlan(intent) {
 }
 
 async function executeStep(jobId, step) {
-  broadcastLog(jobId, { 
-    type: 'step_start', 
-    step: step.id, 
-    description: step.description 
+  broadcastLog(jobId, {
+    type: 'step_start',
+    step: step.id,
+    description: step.description
   });
-  
+
   try {
     let result;
     switch (step.action) {
@@ -299,25 +299,25 @@ async function executeStep(jobId, step) {
       default:
         result = await executeGeneric(jobId, step);
     }
-    
-    broadcastLog(jobId, { 
-      type: 'step_complete', 
-      step: step.id, 
-      result: result 
+
+    broadcastLog(jobId, {
+      type: 'step_complete',
+      step: step.id,
+      result: result
     });
-    
+
     return { success: true, result };
   } catch (error) {
-    broadcastLog(jobId, { 
-      type: 'step_error', 
-      step: step.id, 
-      error: error.message 
+    broadcastLog(jobId, {
+      type: 'step_error',
+      step: step.id,
+      error: error.message
     });
-    
+
     const knownIssues = readMemoryFile('known_issues.json');
     knownIssues[jobId] = { step: step.id, error: error.message, timestamp: new Date().toISOString() };
     writeMemoryFile('known_issues.json', knownIssues);
-    
+
     return { success: false, error: error.message };
   }
 }
@@ -375,7 +375,7 @@ async function executeCommand(jobId, step) {
       setTimeout(() => reject(new Error('Docker execution timeout (30s)')), timeoutMs)
     );
     const [data, container] = await Promise.race([runPromise, timeoutPromise]);
-    if (container) await container.remove().catch(() => {});
+    if (container) await container.remove().catch(() => { });
 
     const exitCode = (data && data.StatusCode !== undefined) ? data.StatusCode : 0;
     return {
@@ -410,17 +410,17 @@ async function processJob(jobData, tenantId) {
   const job = JSON.parse(jobData);
   const jobId = job.id;
   const tid = tenantId || job.tenantId || 'default';
-  
+
   console.log(`[WORKER] Processing job ${jobId} (tenant ${tid}): ${job.message}`);
-  
+
   let heartbeatInterval = null;
   let jobTimedOut = false;
-  
+
   // CRITICAL FIX: Heartbeat update every 5 seconds to detect stuck jobs
   heartbeatInterval = setInterval(async () => {
     try {
       if (!jobTimedOut) {
-        await updateJobStatus(jobId, tid, 'processing', { 
+        await updateJobStatus(jobId, tid, 'processing', {
           heartbeat: new Date().toISOString(),
           stage: 'processing'
         });
@@ -429,7 +429,7 @@ async function processJob(jobData, tenantId) {
       console.error(`[WORKER] Heartbeat failed for ${jobId}:`, err.message);
     }
   }, 5000);
-  
+
   const jobTimeout = setTimeout(async () => {
     jobTimedOut = true;
     console.log(`[WORKER] Job ${jobId} timed out (60s), marking as failed`);
@@ -440,37 +440,37 @@ async function processJob(jobData, tenantId) {
       console.error(`[WORKER] Failed to mark job as failed on timeout:`, err.message);
     }
   }, 60000);
-  
+
   broadcastLog(jobId, { type: 'job_start', message: `Started processing: ${job.message}` });
-  
+
   try {
     await updateJobStatus(jobId, tid, 'processing');
     const intent = await analyzeIntent(job.message);
     broadcastLog(jobId, { type: 'analysis_complete', intent: intent.intent });
-    
+
     const plan = await createPlan(intent);
     broadcastLog(jobId, { type: 'plan_created', steps: plan.steps.length });
-    
+
     let completedSteps = 0;
     for (const step of plan.steps) {
       step.status = 'in_progress';
-      broadcastLog(jobId, { 
-        type: 'step_start', 
-        step: step.id, 
+      broadcastLog(jobId, {
+        type: 'step_start',
+        step: step.id,
         description: step.description,
         total_steps: plan.steps.length,
         completed_steps: completedSteps
       });
-      
+
       const result = await executeStep(jobId, step);
       step.status = result.success ? 'completed' : 'failed';
       step.result = result;
       completedSteps++;
-      
+
       if (result.success) {
-        broadcastLog(jobId, { 
-          type: 'step_complete', 
-          step: step.id, 
+        broadcastLog(jobId, {
+          type: 'step_complete',
+          step: step.id,
           result: result,
           progress: `${completedSteps}/${plan.steps.length}`
         });
@@ -478,10 +478,10 @@ async function processJob(jobData, tenantId) {
         throw new Error(`Step ${step.id} failed: ${result.error}`);
       }
     }
-    
+
     clearTimeout(jobTimeout);
-    await updateJobStatus(jobId, tid, 'completed', { 
-      plan, 
+    await updateJobStatus(jobId, tid, 'completed', {
+      plan,
       intent,
       execution_summary: {
         total_steps: plan.steps.length,
@@ -489,15 +489,15 @@ async function processJob(jobData, tenantId) {
         execution_time: Date.now()
       }
     });
-    
-    broadcastLog(jobId, { 
-      type: 'job_complete', 
+
+    broadcastLog(jobId, {
+      type: 'job_complete',
       status: 'success',
       summary: `Completed ${completedSteps} steps successfully`
     });
-    
+
     console.log(`[WORKER] Job ${jobId} completed successfully`);
-    
+
   } catch (error) {
     clearTimeout(jobTimeout);
     console.error(`[WORKER] Job ${jobId} failed:`, error);
@@ -526,7 +526,7 @@ async function recoverStuckJobs() {
   try {
     // CRITICAL FIX: Also check database for jobs stuck in "planning" state
     const db = require('../../../lib/db-connector').getPool();
-    
+
     // Recovery from database stuck jobs
     const stuckDbJobs = await db.query(`
       SELECT id, tenant_id, status, created_at FROM jobs 
@@ -534,25 +534,25 @@ async function recoverStuckJobs() {
         AND created_at < NOW() - INTERVAL '${timeoutMinutes} minutes'
       LIMIT 100
     `);
-    
+
     let recoveredCount = 0;
     for (const dbJob of stuckDbJobs.rows) {
       console.log(`Recovering stuck job from DB: ${dbJob.id.substring(0, 8)} (status=${dbJob.status}, tenant=${dbJob.tenant_id})`);
       try {
-        await updateJobStatus(dbJob.id, dbJob.tenant_id, 'failed', { 
+        await updateJobStatus(dbJob.id, dbJob.tenant_id, 'failed', {
           error: `Job recovered after ${timeoutMinutes} minute timeout (was in ${dbJob.status} state)`,
           recovered_at: new Date().toISOString()
         });
-        broadcastLog(dbJob.id, { 
-          type: 'job_recovered', 
-          message: `Job recovered from ${dbJob.status} state after ${timeoutMinutes}m timeout` 
+        broadcastLog(dbJob.id, {
+          type: 'job_recovered',
+          message: `Job recovered from ${dbJob.status} state after ${timeoutMinutes}m timeout`
         });
         recoveredCount++;
       } catch (err) {
         console.error(`Failed to recover job ${dbJob.id}:`, err.message);
       }
     }
-    
+
     // Also recovery from Redis cache
     const keys = await redisClient.keys('tenant:*:job:*');
     for (const key of keys) {
@@ -565,7 +565,7 @@ async function recoverStuckJobs() {
           if (jobTime < cutoffTime) {
             console.log(`Recovering stuck job from Redis: ${job.id.substring(0, 8)} (tenant ${tenantId})`);
             try {
-              await updateJobStatus(job.id, tenantId, 'failed', { 
+              await updateJobStatus(job.id, tenantId, 'failed', {
                 error: `Job recovered after ${timeoutMinutes} minute timeout`,
                 recovered_at: new Date().toISOString()
               });
@@ -587,27 +587,53 @@ async function recoverStuckJobs() {
 
 // Core Worker Bootstrap
 async function workerBootstrap() {
+  // Start Health Check Server early
+  const http = require('http');
+  const healthPort = parseInt(process.env.WORKER_PORT) || 3004;
+  const healthServer = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'ok',
+        worker: 'active',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
+      }));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+
+  healthServer.on('error', (err) => {
+    console.error(`[WORKER] Health server error: ${err.message}`);
+  });
+
+  healthServer.listen(healthPort, '0.0.0.0', () => {
+    console.log(`[WORKER] Health check server listening on port ${healthPort}`);
+  });
+
   const profile = getEnvProfile();
   console.log(`[ENV] Profile: ${profile.env} (logging=${profile.logging}, limits=${profile.limits}, dry_run=${profile.dry_run})`);
   console.log('[CORE] Worker starting...');
-  
+
   // Initialize database connection
   try {
     console.log('[DATABASE] Initializing database connection...');
     initializeDatabase();
-    
+
     console.log('[DATABASE] Testing database connection...');
     const connectionTest = await testConnection();
     if (!connectionTest) {
       throw new Error('Database connection test failed');
     }
-    
+
     console.log('[DATABASE] Database connection established');
   } catch (error) {
     console.error('[DATABASE] Database initialization failed:', error);
     process.exit(1);
   }
-  
+
   // Test Redis connection
   try {
     console.log('[REDIS] Testing Redis connection...');
@@ -617,46 +643,29 @@ async function workerBootstrap() {
     console.error('[REDIS] Redis initialization failed:', error);
     process.exit(1);
   }
-  
+
   // Check adapter availability
   const ollamaAvailable = process.env.OLLAMA_URL && process.env.OLLAMA_URL.trim() !== '';
   const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '';
-  
+
   console.log('[ADAPTER] Ollama LLM:', ollamaAvailable ? 'AVAILABLE' : 'UNAVAILABLE');
   console.log('[ADAPTER] Docker Runtime:', dockerAvailable ? 'AVAILABLE' : 'UNAVAILABLE');
-  
+
   if (!ollamaAvailable && !dockerAvailable) {
     console.log('[CORE] Worker running in core-only mode (no external adapters)');
   }
-  
+
   return { ollamaAvailable, dockerAvailable };
 }
-  
+
 // Core Worker Loop (tenant-scoped queues: BLPOP tenant:*:job_queue)
 async function workerLoop() {
-  // Start Health Check Server
-  const http = require('http');
-  const healthPort = process.env.WORKER_PORT || 3004;
-  const healthServer = http.createServer((req, res) => {
-    if (req.url === '/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', worker: 'active' }));
-    } else {
-      res.writeHead(404);
-      res.end();
-    }
-  });
-  
-  healthServer.listen(healthPort, '0.0.0.0', () => {
-    console.log(`[WORKER] Health check server listening on port ${healthPort}`);
-  });
-
   console.log('[CORE] Worker loop started - waiting for jobs (tenant-scoped queues)...');
   setTimeout(() => recoverStuckJobs(), 5000);
-  
+
   let idleCount = 0;
   const maxIdleCycles = 6;
-  
+
   while (workerRunning) {
     try {
       let tenants = await redisClient.sMembers('tenants');
@@ -667,7 +676,7 @@ async function workerLoop() {
       const queueKeys = tenants.map(t => `tenant:${t}:job_queue`);
       const timeout = 10;
       const jobData = await redisClient.blPop(...queueKeys, timeout);
-      
+
       if (jobData) {
         idleCount = 0;
         const queueKey = Array.isArray(jobData) ? jobData[0] : jobData.key;
@@ -679,12 +688,12 @@ async function workerLoop() {
       } else {
         idleCount++;
         console.log(`[WORKER] No jobs found (idle cycle ${idleCount}/${maxIdleCycles})`);
-        
+
         if (idleCount >= maxIdleCycles) {
           console.warn('[WORKER] IDLE WARNING: Worker has been idle for 60+ seconds');
           console.warn('[WORKER] This may indicate: 1) No jobs being submitted, 2) Queue connectivity issue, 3) System malfunction');
           console.warn('[WORKER] Worker will continue monitoring but system administrator should verify job submission pipeline');
-          
+
           // Reset counter to avoid spam but continue monitoring
           idleCount = 0;
         }
@@ -713,7 +722,7 @@ redisClient.connect().then(async () => {
 const shutdown = () => {
   workerRunning = false;
   console.log('[WORKER] Shutdown signal received, closing Redis...');
-  redisClient.quit().catch(() => {}).finally(() => process.exit(0));
+  redisClient.quit().catch(() => { }).finally(() => process.exit(0));
   setTimeout(() => process.exit(1), 8000);
 };
 process.on('SIGTERM', shutdown);

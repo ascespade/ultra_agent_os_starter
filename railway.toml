@@ -22,7 +22,7 @@ name = "NODE_ENV"
 value = "production"
 [[services.env]]
 name = "PORT"
-value = "3003"
+value = "8080"
 [[services.env]]
 name = "API_URL"
 serviceRef = "ultra-agent-api"
@@ -71,6 +71,9 @@ value = ""
 [[services.env]]
 name = "DEFAULT_ADMIN_PASSWORD"
 generate = true
+[[services.env]]
+name = "WORKER_URL"
+value = "http://ultra-agent-worker:3004"
 
 # Worker Service
 [[services]]
@@ -78,6 +81,12 @@ name = "ultra-agent-worker"
 source = "."
 dockerfile = "apps/worker/Dockerfile"
 icon = "⚙️"
+[[services.healthcheck]]
+path = "/health"
+port = 3004
+interval = 30
+timeout = 10
+retries = 5
 [[services.env]]
 name = "DATABASE_URL"
 serviceRef = "Postgres"

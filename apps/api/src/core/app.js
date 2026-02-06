@@ -81,7 +81,7 @@ function createApp() {
 
   // Dashboard routes - serve the main dashboard
   app.get("/dashboard", (req, res) => {
-    res.sendFile(path.join(uiPath, "index.html"));
+    res.sendFile(path.join(uiPath, "dashboard.html"));
   });
 
   app.get("/ui/", (req, res) => {

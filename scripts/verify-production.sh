@@ -43,12 +43,20 @@ else
     exit 1
 fi
 
-# Check Worker (via API adapter route or logs)
-# Using API to check worker status if endpoint exists
-if curl -s -f http://localhost:3000/worker/health > /dev/null; then
-    echo "✅ Worker Service: HEALTHY"
+# Check Worker Health Server (Port 3004)
+if curl -s -f http://localhost:3004/health > /dev/null; then
+    echo "✅ Worker Health Server: HEALTHY"
 else
-    echo "⚠️  Worker Service check via API failed (might be startup delay)"
+    echo "❌ Worker Health Server: FAILED"
+    docker compose logs worker
+    exit 1
+fi
+
+# Check Worker via API
+if curl -s -f http://localhost:3000/worker/health > /dev/null; then
+    echo "✅ Worker via API: HEALTHY"
+else
+    echo "⚠️  Worker check via API failed (might be startup delay)"
 fi
 
 echo "---------------------------------------------------"
