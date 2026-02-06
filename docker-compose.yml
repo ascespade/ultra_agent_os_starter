@@ -22,8 +22,11 @@ services:
       context: .
       dockerfile: ./apps/api/Dockerfile
     environment:
+      - NODE_ENV=production
+      - PORT=3000
       - HOST=0.0.0.0
       - UI_URL=http://localhost:3000
+      - INTERNAL_API_KEY=docker-validator-internal-key
       - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
       - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data/agent
@@ -42,9 +45,11 @@ services:
       context: .
       dockerfile: ./apps/worker/Dockerfile
     environment:
+      - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
       - DATA_DIR=/data/agent
       - JWT_SECRET=ultra-agent-jwt-secret-change-in-production
+      - INTERNAL_API_KEY=docker-validator-internal-key
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/himam
     depends_on: [postgres, redis]
     restart: unless-stopped

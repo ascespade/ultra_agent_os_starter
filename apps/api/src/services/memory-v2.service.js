@@ -179,29 +179,37 @@ class MemoryServiceV2 {
   async getWorkspace(tenantId, userId) {
     const client = await this.pool.connect();
     try {
-      // Get memories
-      const memoryQuery = `
-        SELECT id, key, created_at, updated_at
-        FROM memories
-        WHERE tenant_id = $1 AND user_id = $2
-        ORDER BY updated_at DESC
-        LIMIT 50
-      `;
+      // Resolve 'system' to first admin user id for memories (user_id is NOT NULL)
+      let effectiveUserId = userId;
+      if (userId === 'system') {
+        const u = await client.query('SELECT id FROM users ORDER BY id LIMIT 1');
+        effectiveUserId = u.rows[0]?.id ?? null;
+      }
 
-      const memoryResult = await client.query(memoryQuery, [tenantId, userId]);
+      let memoryResult = { rows: [] };
+      if (effectiveUserId != null) {
+        const memoryQuery = `
+          SELECT id, key, created_at, updated_at
+          FROM memories
+          WHERE tenant_id = $1 AND user_id = $2
+          ORDER BY updated_at DESC
+          LIMIT 50
+        `;
+        memoryResult = await client.query(memoryQuery, [tenantId, effectiveUserId]);
+      }
 
-      // Get basic jobs info (simplified)
+      // Jobs: system can see all in tenant (user_id can be NULL)
       const jobsQuery = `
         SELECT id, type, status, created_at, updated_at
         FROM jobs
-        WHERE tenant_id = $1 AND user_id = $2
+        WHERE tenant_id = $1
         ORDER BY created_at DESC
         LIMIT 50
       `;
 
       let jobs = [];
       try {
-        const jobsResult = await client.query(jobsQuery, [tenantId, userId]);
+        const jobsResult = await client.query(jobsQuery, [tenantId]);
         jobs = jobsResult.rows;
       } catch (err) {
         logger.warn({ error: err.message }, 'Jobs table not available, returning empty jobs list');

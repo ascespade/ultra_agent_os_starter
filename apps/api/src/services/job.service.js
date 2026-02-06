@@ -83,10 +83,11 @@ class JobService {
         RETURNING id, created_at, status
       `;
 
+      const effectiveUserId = (userId === 'system' || userId === undefined) ? null : userId;
       const values = [
         jobId,
         tenantId,
-        userId,
+        effectiveUserId,
         type,
         priority,
         inputStr,
@@ -460,7 +461,7 @@ class JobService {
 
       logger.debug({ queryParams, whereClause }, 'Initial query parameters');
 
-      if (userId) {
+      if (userId && userId !== 'system') {
         whereClause += ' AND user_id = $' + paramIndex;
         queryParams.push(userId);
         paramIndex++;

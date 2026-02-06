@@ -1,1 +1,1 @@
-{"name": "ultra-agent-core", "version": "1.0.0", "description": "Ultra Agent OS - Core Backend Services Only", "scripts": {"start": "echo \"Core backend services - use individual service start scripts\""}}
+{"name": "ultra-agent-core", "version": "1.0.0", "description": "Ultra Agent OS - Core Backend Services Only", "scripts": {"start": "echo \"Core backend services - use individual service start scripts\""}, "dependencies": {"pg": "^8.11.5", "redis": "^4.7.1"}}

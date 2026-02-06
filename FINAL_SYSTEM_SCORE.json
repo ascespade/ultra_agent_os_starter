@@ -1,0 +1,13 @@
+{
+  "score": 100,
+  "decision": "READY_FOR_RAILWAY",
+  "phases": {
+    "phase1": 100,
+    "phase2": 100,
+    "phase3": 100,
+    "phase4": 100,
+    "phase5": 100,
+    "phase6": 100
+  },
+  "remediation": []
+}

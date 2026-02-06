@@ -1,4 +1,4 @@
-# UI Service - build context = apps/ui when Root Directory is apps/ui
+# UI - nginx static server (Railway: Root Directory = apps/ui)
 FROM nginx:alpine
 
 RUN apk add --no-cache curl gettext
