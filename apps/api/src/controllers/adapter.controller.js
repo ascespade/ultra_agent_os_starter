@@ -30,13 +30,14 @@ async function getStatus(req, res) {
     let redisStatus = "unknown";
     let redisError = null;
     let queueLength = 0;
-    
+
     try {
       const redis = getRedisClient();
       await redis.ping();
       redisStatus = "connected";
-      
-      const tenantQueueKey = `tenant:${req.tenantId}:job_queue`;
+
+      const tenantId = req.tenantId || 'system';
+      const tenantQueueKey = `tenant:${tenantId}:job_queue`;
       queueLength = await redis.lLen(tenantQueueKey);
     } catch (error) {
       redisStatus = "error";
@@ -115,10 +116,10 @@ async function testAdapter(req, res) {
           error: ollamaResponse.error
         };
         break;
-        
+
       // ... (OpenAI, Gemini logic can be added here similar to original server.js)
       // Simplifying for brevity to respect 400 lines limit, but keeping core logic.
-      
+
       default:
         return res.status(400).json({ error: "Unknown or unsupported provider for test" });
     }

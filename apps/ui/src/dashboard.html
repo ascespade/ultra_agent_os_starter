@@ -806,6 +806,12 @@
 
         <!-- Jobs Page -->
         <div class="page" id="jobs">
+          <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="font-size: 1.5rem; color: var(--text-primary);">Job Management</h2>
+            <button onclick="createTestJob()" class="btn-sm success" style="padding: 0.75rem 1.5rem; font-weight: 600;">
+              <i class="fas fa-plus"></i> Create Test Job
+            </button>
+          </div>
           <!-- Job Statistics -->
           <div class="metrics-grid">
             <div class="metric-card success">
@@ -915,15 +921,25 @@
   <script>
     class ProfessionalOpsDashboard {
       constructor() {
-        // Smart API resolution
-        let baseUrl = (window.ENV && window.ENV.API_URL) ? window.ENV.API_URL : 'http://localhost:3000';
-        const currentHost = window.location.hostname;
+        // Advanced API resolution
+        let baseUrl = (window.ENV && window.ENV.API_URL) ? window.ENV.API_URL : '';
 
+        // If relative path like '/api' was provided as base, we need the actual root for health checks
+        if (baseUrl === '/api') {
+          baseUrl = window.location.origin;
+        } else if (!baseUrl || baseUrl === '/') {
+          baseUrl = window.location.origin;
+        }
+
+        // Remove trailing slashes and ensure protocol
+        baseUrl = baseUrl.replace(/\/+$/, '');
         if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
-          baseUrl = baseUrl.replace('localhost', currentHost).replace('127.0.0.1', currentHost);
+          baseUrl = baseUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname);
         }
 
         this.apiBase = baseUrl;
+        console.log('[DASHBOARD] API Base set to:', this.apiBase);
+
         this.refreshInterval = 30000;
         this.isApiAvailable = false;
         this.charts = window.UltraCharts ? new window.UltraCharts() : null;
@@ -1365,10 +1381,70 @@
     });
 
     // Global Actions
-    window.pauseQueue = (n) => console.log('Pause:', n);
-    window.clearQueue = (n) => console.log('Clear:', n);
-    window.viewJob = (id) => console.log('View Job:', id);
-    window.viewMemory = (k) => alert('Memory: ' + k);
+    window.pauseQueue = (n) => alert('Queue pause feature coming soon for ' + n);
+    window.clearQueue = (n) => {
+      if (confirm('Are you sure you want to clear ' + n + '?')) {
+        alert('Clear requested for ' + n);
+      }
+    };
+
+    window.viewJob = async (id) => {
+      if (!window.dashboard) return;
+      try {
+        const res = await fetch(`${window.dashboard.apiBase}/api/jobs/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          alert('Job Details:\n' + JSON.stringify(data, null, 2));
+        } else {
+          alert('Failed to fetch job: ' + res.statusText);
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    };
+
+    window.viewMemory = async (k) => {
+      if (!window.dashboard) return;
+      try {
+        const res = await fetch(`${window.dashboard.apiBase}/api/memory/${k}`);
+        if (res.ok) {
+          const data = await res.json();
+          alert('Memory Content for ' + k + ':\n' + JSON.stringify(data, null, 2));
+        } else {
+          alert('Memory entry not found');
+        }
+      } catch (e) {
+        alert('Connection error');
+      }
+    };
+
+    window.refreshPerformanceChart = () => {
+      if (window.dashboard) window.dashboard.loadSystemMetrics();
+    };
+
+    window.refreshMemory = () => {
+      if (window.dashboard) window.dashboard.loadMemoryData();
+    };
+
+    window.createTestJob = async () => {
+      if (!window.dashboard) return;
+      try {
+        const res = await fetch(`${window.dashboard.apiBase}/api/test-data/create-test-jobs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count: 1 })
+        });
+        if (res.ok) {
+          alert('Test job created successfully');
+          window.dashboard.loadData();
+        } else {
+          const err = await res.json();
+          alert('Failed to create test job: ' + (err.message || res.statusText));
+        }
+      } catch (e) {
+        alert('Network error while creating test job');
+      }
+    };
   </script>
 </body>
 
