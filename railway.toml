@@ -27,6 +27,9 @@ value = "3003"
 name = "API_URL"
 serviceRef = "ultra-agent-api"
 variableRef = "RAILWAY_PUBLIC_URL"
+[[services.env]]
+name = "RAILWAY_DOCKERFILE_PATH"
+value = "Dockerfile"
 
 # API Service
 [[services]]
