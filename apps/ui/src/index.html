@@ -978,10 +978,19 @@
         // Advanced API resolution
         let baseUrl = (window.ENV && window.ENV.API_URL) ? window.ENV.API_URL : '';
 
+        // Railway-specific API URL resolution
+        if (!baseUrl || baseUrl === '/') {
+          if (window.location.hostname.includes('railway.app')) {
+            // On Railway, use the API service URL
+            baseUrl = 'https://ultra-agent-api-production.up.railway.app';
+          } else {
+            // Local development
+            baseUrl = window.location.origin;
+          }
+        }
+
         // If relative path like '/api' was provided as base, we need the actual root for health checks
         if (baseUrl === '/api') {
-          baseUrl = window.location.origin;
-        } else if (!baseUrl || baseUrl === '/') {
           baseUrl = window.location.origin;
         }
 
@@ -1523,17 +1532,27 @@
       if (!window.dashboard) return;
       try {
         const res = await fetch(`${window.dashboard.apiBase}/api/jobs`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: 'Manual Test Job via Dashboard ' + new Date().toISOString() })
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            message: "Manual Test Job via Dashboard " + new Date().toLocaleTimeString(),
+            tenantId: "system",
+            type: "test"
+          })
         });
         if (res.ok) {
-            alert('Test job created successfully!');
-            window.dashboard.loadJobsData();
+          const result = await res.json();
+          alert('Test job created successfully! Job ID: ' + result.jobId);
+          window.dashboard.loadData();
+          window.dashboard.loadJobsData();
         } else {
-            alert('Failed to create job');
+          const err = await res.json();
+          alert('Failed to create job: ' + (err.message || res.statusText));
         }
-      } catch (e) { alert('Error: ' + e.message); }
+      } catch (e) {
+        console.error('Error creating test job:', e);
+        alert('Network error while creating job: ' + e.message);
+      }
     };
 
     window.pauseQueue = (n) => alert('Queue pause feature coming soon for ' + n);
@@ -1589,27 +1608,7 @@
        if (window.dashboard) window.dashboard.loadJobsData();
     };
 
-    window.createTestJob = async () => {
-      if (!window.dashboard) return;
-      try {
-        const res = await fetch(`${window.dashboard.apiBase}/api/jobs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: "Manual Job " + new Date().toLocaleTimeString() })
-        });
-        if (res.ok) {
-          alert('Job created successfully');
-          window.dashboard.loadData();
-          window.dashboard.loadJobsData();
-        } else {
-          const err = await res.json();
-          alert('Failed to create job: ' + (err.message || res.statusText));
-        }
-      } catch (e) {
-        alert('Network error while creating job');
-      }
-    };
-    
+        
     window.createTenant = () => {
        alert('Tenant creation UI not yet implemented. Use API directly.');
     };
