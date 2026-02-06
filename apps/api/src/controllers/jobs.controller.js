@@ -7,11 +7,11 @@ const logger = pino({
 });
 
 async function createJob(req, res) {
-  const { message, type = 'system', metadata = {}, tags = [], options = {} } = req.body;
+  const { message, type = 'system', metadata = {}, tags = [], options = {}, tenantId = 'system' } = req.body;
 
   try {
     const result = await jobService.createJob(
-      'system', // Fixed tenant ID for Ops
+      tenantId, // Use provided tenantId or default to 'system'
       'system', // Fixed user ID for Ops
       type,
       { message },

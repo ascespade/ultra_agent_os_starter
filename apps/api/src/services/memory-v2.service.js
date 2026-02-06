@@ -13,17 +13,12 @@ class MemoryServiceV2 {
 
   async initialize() {
     try {
-      this.pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
-      });
+      // Use the same database connection as main service
+      const { getPool } = require('../../../../lib/db-connector');
+      this.pool = getPool();
 
-      // Run the new schema migration
-      await this.runSchemaMigration();
-
-      logger.info('Memory Service V2 initialized successfully');
+      // Skip schema migration - using main db-connector migrations only
+      logger.info('Memory Service V2 initialized successfully (using main schema)');
     } catch (error) {
       logger.error({ error: error.message }, 'Failed to initialize Memory Service V2');
       throw error;
@@ -211,12 +206,12 @@ class MemoryServiceV2 {
         effectiveUserId = u.rows[0]?.id ?? null;
       }
 
-      // Use the new memory_entries table instead of memories
+      // Use the memories table (created in db-connector.js)
       let memoryResult = { rows: [] };
       if (effectiveUserId != null) {
         const memoryQuery = `
           SELECT id, agent_id as key, content, created_at, updated_at
-          FROM memory_entries
+          FROM memories
           WHERE tenant_id = $1 AND agent_id = $2
           ORDER BY updated_at DESC
           LIMIT 50

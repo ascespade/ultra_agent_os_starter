@@ -20,6 +20,18 @@ CREATE TABLE IF NOT EXISTS memory_entries (
     retrieval_priority FLOAT DEFAULT 0.5
 );
 
+-- Legacy memories table for backward compatibility
+CREATE TABLE IF NOT EXISTS memories (
+    id SERIAL PRIMARY KEY,
+    tenant_id VARCHAR(100) NOT NULL DEFAULT 'default',
+    user_id INTEGER,
+    key VARCHAR(255) NOT NULL,
+    content JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(tenant_id, user_id, key)
+);
+
 -- Memory relationships table
 CREATE TABLE IF NOT EXISTS memory_relationships (
     id SERIAL PRIMARY KEY,
@@ -59,6 +71,10 @@ CREATE INDEX IF NOT EXISTS idx_memory_entries_type ON memory_entries(memory_type
 CREATE INDEX IF NOT EXISTS idx_memory_entries_created_at ON memory_entries(created_at);
 CREATE INDEX IF NOT EXISTS idx_memory_entries_tags ON memory_entries USING GIN(tags);
 CREATE INDEX IF NOT EXISTS idx_memory_entries_metadata ON memory_entries USING GIN(metadata);
+
+-- Legacy memories table indexes
+CREATE INDEX IF NOT EXISTS idx_memories_tenant_user ON memories(tenant_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);
 
 -- Vector similarity index (pgvector extension required)
 -- Skipped: Using TEXT storage for embeddings instead of VECTOR type

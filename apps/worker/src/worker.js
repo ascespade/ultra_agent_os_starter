@@ -400,7 +400,8 @@ async function executeGeneric(jobId, step) {
 async function processJob(jobData, tenantId) {
   const job = JSON.parse(jobData);
   const jobId = job.id;
-  const tid = tenantId || job.tenantId || 'default';
+  // Use tenant_id from the job data itself, not the queue-derived tenantId
+  const tid = job.tenantId || job.tenant_id || 'default';
 
   console.log(`[WORKER] Processing job ${jobId} (tenant ${tid}): ${job.message}`);
 
@@ -507,6 +508,51 @@ async function processJob(jobData, tenantId) {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
     }
+  }
+}
+
+const STUCK_JOB_THRESHOLD_MS = parseInt(process.env.STUCK_JOB_THRESHOLD_MS) || 900000; // 15 minutes default
+
+async function recoverStuckJobsOnStartup() {
+  const threshold = Date.now() - STUCK_JOB_THRESHOLD_MS;
+  console.log(`[RECOVERY] Startup recovery: checking for jobs stuck before ${new Date(threshold).toISOString()}`);
+  
+  try {
+    const db = require('../../../lib/db-connector').getPool();
+    
+    // Find jobs stuck in 'processing' state past threshold
+    const stuckJobs = await db.query(`
+      SELECT id, tenant_id, status, created_at, updated_at
+      FROM jobs
+      WHERE status = 'processing'
+        AND updated_at < $1
+      LIMIT 100
+    `, [new Date(threshold)]);
+    
+    console.log(`[RECOVERY] Found ${stuckJobs.rows.length} stuck jobs on startup`);
+    
+    for (const job of stuckJobs.rows) {
+      console.log(`[RECOVERY] Resetting stuck job ${job.id.substring(0, 8)} to queued`);
+      await db.query(`
+        UPDATE jobs
+        SET status = 'queued', updated_at = NOW()
+        WHERE id = $1 AND status = 'processing'
+      `, [job.id]);
+      
+      // Re-enqueue to Redis
+      const queueKey = `tenant:${job.tenant_id}:job_queue`;
+      await redisClient.lPush(queueKey, JSON.stringify({
+        id: job.id,
+        tenant_id: job.tenant_id,
+        status: 'queued',
+        recovered: true,
+        recovered_at: new Date().toISOString()
+      }));
+    }
+    
+    console.log(`[RECOVERY] Startup recovery complete: ${stuckJobs.rows.length} jobs re-queued`);
+  } catch (error) {
+    console.error('[RECOVERY] Startup recovery failed:', error.message);
   }
 }
 
@@ -635,6 +681,10 @@ async function workerBootstrap() {
     process.exit(1);
   }
 
+  // Run startup recovery BEFORE processing jobs
+  console.log('[RECOVERY] Running startup recovery for stuck jobs...');
+  await recoverStuckJobsOnStartup();
+
   // Check adapter availability
   const ollamaAvailable = process.env.OLLAMA_URL && process.env.OLLAMA_URL.trim() !== '';
   const dockerAvailable = process.env.DOCKER_HOST && process.env.DOCKER_HOST.trim() !== '';
@@ -710,11 +760,58 @@ redisClient.connect().then(async () => {
   process.exit(1);
 });
 
-const shutdown = () => {
+// Graceful shutdown: release in-flight jobs back to queue
+async function gracefulShutdown() {
+  console.log('[SHUTDOWN] Graceful shutdown initiated...');
   workerRunning = false;
-  console.log('[WORKER] Shutdown signal received, closing Redis...');
-  redisClient.quit().catch(() => { }).finally(() => process.exit(0));
-  setTimeout(() => process.exit(1), 8000);
+  
+  try {
+    // Mark all processing jobs as 'queued' for reprocessing
+    const db = require('../../../lib/db-connector').getPool();
+    
+    const result = await db.query(`
+      UPDATE jobs
+      SET status = 'queued', updated_at = NOW()
+      WHERE status = 'processing'
+        AND (worker_id IS NULL OR worker_id = 'local-worker')
+      RETURNING id, tenant_id
+    `);
+    
+    console.log(`[SHUTDOWN] Released ${result.rows.length} in-flight jobs back to queue`);
+    
+    // Re-enqueue released jobs to Redis
+    for (const job of result.rows) {
+      const queueKey = `tenant:${job.tenant_id}:job_queue`;
+      await redisClient.lPush(queueKey, JSON.stringify({
+        id: job.id,
+        tenant_id: job.tenant_id,
+        status: 'queued',
+        released_by_shutdown: true,
+        released_at: new Date().toISOString()
+      }));
+    }
+    
+    console.log('[SHUTDOWN] In-flight jobs re-queued for other workers');
+  } catch (error) {
+    console.error('[SHUTDOWN] Error releasing jobs:', error.message);
+  }
+  
+  console.log('[SHUTDOWN] Closing Redis connection...');
+  await redisClient.quit().catch(() => { });
+  
+  console.log('[SHUTDOWN] Graceful shutdown complete');
+  process.exit(0);
+}
+
+const shutdown = () => {
+  gracefulShutdown().catch(err => {
+    console.error('[SHUTDOWN] Error during graceful shutdown:', err.message);
+    process.exit(1);
+  });
+  setTimeout(() => {
+    console.error('[SHUTDOWN] Forced exit after timeout');
+    process.exit(1);
+  }, 10000);
 };
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

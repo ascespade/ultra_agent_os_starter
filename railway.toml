@@ -83,7 +83,6 @@ dockerfile = "apps/worker/Dockerfile"
 icon = "⚙️"
 [[services.healthcheck]]
 path = "/health"
-port = 3004
 interval = 30
 timeout = 10
 retries = 5
