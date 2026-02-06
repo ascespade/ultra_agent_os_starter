@@ -3,7 +3,7 @@ FROM nginx:alpine
 # Install curl for healthcheck and gettext for envsubst
 RUN apk add --no-cache curl gettext
 
-# Copy static files (context is apps/ui when source = "apps/ui")
+# Copy static files (context = apps/ui when root dir is apps/ui)
 COPY src /usr/share/nginx/html
 
 # Copy nginx configuration
