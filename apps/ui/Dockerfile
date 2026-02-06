@@ -1,9 +1,9 @@
 FROM node:20-alpine
 
-WORKDIR /app/apps/ui
+WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy package files first for better caching
+COPY package*.json ./
 
 # Install dependencies
 RUN npm install --omit=dev
@@ -25,3 +25,4 @@ ENV NODE_ENV=production
 EXPOSE 3003
 
 CMD ["node", "src/server.js"]
+
